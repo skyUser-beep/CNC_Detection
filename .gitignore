@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+../.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# YOLO / model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Training outputs
+runs/
+wandb/
+mlruns/
+
+# Project data
+data/videos/*
+data/outputs/*
+data/datasets/*
+data/cache/*
+
+# Keep folder structure
+!data/videos/.gitkeep
+!data/outputs/.gitkeep
+!data/datasets/.gitkeep
+!data/cache/.gitkeep
+
+# Generated camera zones
+data/outputs/camera_zones/
+*_zones.json
+
+# Generated screenshots
+screenshots/
+*.jpg
+*.jpeg
+*.png
+
+# Generated logs
+*.log
+events.csv
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Python testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
