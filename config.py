@@ -62,6 +62,7 @@ zone_margin_px = 60
 track_grace_seconds = 1.5
 inside_grace_seconds = 1.5
 display_width = 900
+multiple_limit_seconds=120
 duplicate_iou_threshold = 0.65
 duplicate_center_ratio = 0.25
 

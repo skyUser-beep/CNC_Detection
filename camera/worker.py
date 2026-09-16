@@ -9,6 +9,8 @@ from zones.zone_manager import ZoneManager
 from safety.rules import SafetyRules
 from display.renderer import Renderer
 
+# brain for one camera ,processes one camera
+# takes frames provided by reader.py and performs the processing pipeline
 class CameraWorker(threading.Thread):
     def __init__(self, camera_id, source, config, device, half, phone_detector, event_manager, zone_manager):
         super().__init__(daemon=True, name=f"worker-{camera_id}")
@@ -112,10 +114,8 @@ class CameraWorker(threading.Thread):
             x1, y1, x2, y2 = map(int, box)
             persons.append({
                 "id": int(track_id),
-                "x1": x1,
-                "y1": y1,
-                "x2": x2,
-                "y2": y2,
+                "x1": x1,"y1": y1,
+                "x2": x2,"y2": y2,
                 "zone": self.zone_manager.person_zone(self.zone_masks, x1, y1, x2, y2),
                 "confidence": float(confidence),
             })
@@ -124,29 +124,84 @@ class CameraWorker(threading.Thread):
     def _check_phones(self, frame, persons, video_time, frame_number):
         if frame_number % self.config.phone_detection_interval != 0:
             return
+
         for person in persons:
-            if person["zone"] is None or not self.safety.phone_allowed(person["id"]):
+            track_id = person["id"]
+            zone = person["zone"]
+            if zone is None:
                 continue
-            boxes = self.phone_detector.detect_in_person(
-                frame, person["x1"], person["y1"], person["x2"], person["y2"]
+
+            if not self.safety.phone_allowed(track_id):
+                continue
+
+            boxes = self.phone_detector.detect_in_person(frame,
+                person["x1"],person["y1"],
+                person["x2"], person["y2"]
             )
             if not boxes:
                 continue
-            shot = ZoneManager.draw(frame.copy(), self.zones)
-            cv2.rectangle(shot, (person["x1"], person["y1"]), (person["x2"], person["y2"]), (0, 255, 0), 2)
-            cv2.putText(shot, f"ID {person['id']} | ZONE {person['zone'] + 1}", (person["x1"], max(25, person["y1"] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # Create screenshot frame with annotations
+            shot = ZoneManager.draw(frame.copy(),self.zones)
+
+            # Person bounding box
+            cv2.rectangle(shot,
+                (person["x1"], person["y1"]),(person["x2"], person["y2"]),
+                (0, 255, 0),
+                2)
+
+            cv2.putText(shot,
+                f"ID {track_id} | ZONE {zone + 1}",
+                (person["x1"], max(25, person["y1"] - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+            # Phone bounding boxes
             for box in boxes:
-                cv2.rectangle(shot, (box["x1"], box["y1"]), (box["x2"], box["y2"]), (0, 0, 255), 3)
-                cv2.putText(shot, f"PHONE {box['confidence']:.2f}", (box["x1"], max(25, box["y1"] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            path = self.event_manager.screenshot(self.camera_id, shot, video_time, "PHONE_DETECTED", {person["id"]}, person["zone"])
-            self.event_manager.log(self.camera_id, video_time, "PHONE_DETECTED", person["id"], f"Phone detected inside CNC work zone Zone {person['zone'] + 1}; screenshot={path if path else 'screenshot_failed'}")
-            self.safety.mark_phone(person["id"])
+                cv2.rectangle(shot,
+                    (box["x1"], box["y1"]),(box["x2"], box["y2"]),
+                    (0, 0, 255),
+                    3
+                )
+
+                cv2.putText(shot,
+                    f"PHONE {box['confidence']:.2f}",
+                    (box["x1"], max(25, box["y1"] - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,(0, 0, 255),
+                    2)
+
+            # Event information
+            event_type = "PHONE_DETECTED"
+            details = "Phone detected inside work zone"
+
+            # Write CSV event
+            self.event_manager.log(self.camera_id,video_time,event_type,track_id,details)
+
+            # Save screenshot
+            self.event_manager.screenshot(self.camera_id,
+                shot,video_time,
+                event_type,{track_id},zone)
+            # Prevent repeated phone events for this track
+            self.safety.mark_phone(track_id)
+            print(f"[{self.camera_id}] PHONE DETECTED | Track {track_id} | Zone {zone + 1} | {video_time:.2f}s")
 
     def _process_one(self, frame, frame_number, video_time):
         try:
             results = self.person_detector.track(frame)
             persons = self._extract_persons(results)
-            persons, inside = self.safety.update(persons, video_time, len(self.zones))
+            persons, inside,events = self.safety.update(persons, video_time, len(self.zones))
+            for event in events:
+                self.event_manager.screenshot(
+                    self.camera_id,
+                    frame,
+                    video_time,
+                    event["event_type"],
+                    event["track_ids"],
+                    event.get("zone")
+                )
             self._check_phones(frame, persons, video_time, frame_number)
             with self.state_lock:
                 self.latest_persons = [p.copy() for p in persons]

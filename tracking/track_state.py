@@ -74,3 +74,49 @@ def find_previous_track(track_states, person, current_time, active_ids, max_seco
             best_score = score
             best_id = old_id
     return best_id
+
+def match_locked_person(locked_box,detections,used_ids=None,center_ratio=1.0,iou_threshold=0.10):
+    if used_ids is None:
+        used_ids=set()
+    if locked_box is None:
+        return None
+    lx1, ly1, lx2, ly2 = locked_box
+
+    lcx=(lx1+lx2) / 2
+    lcy=(ly1+ly2) / 2
+
+    lwidth=max(1,lx2-lx1)
+    lheight=max(1,ly2-ly1)
+
+    max_distance=max(lwidth,lheight)*center_ratio
+    best_person=None
+    best_score=-1
+
+    for person in detections:
+        track_id =person["id"]
+        if track_id in used_ids:
+            continue
+        px1=person["x1"]
+        py1=person["y1"]
+        px2=person["x2"]
+        py2=person["y2"]
+
+        pcx=(px1+px2)/2
+        pcy=(py1+py2)/2
+
+        dx=pcx-lcx
+        dy=pcy-lcy
+        distance= (dx*dx + dy*dy)** 0.5
+        iou= calculate_iou(locked_box, (px1,py1,px2,py2))
+
+        if iou<iou_threshold and distance > max_distance:
+            continue
+
+        distance_score=max(0.0,1.0-distance/max_distance) if max_distance>0 else 0.0
+        score= (iou*0.6 + distance_score*0.4)
+
+        if score> best_score:
+            best_score=score
+            best_person=person
+
+    return best_person

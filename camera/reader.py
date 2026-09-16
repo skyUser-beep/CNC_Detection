@@ -2,7 +2,7 @@ import threading
 import time
 from pathlib import Path
 import cv2
-
+# only responsible for getting frames from the camera reading video/RTSP stream
 class CameraReader(threading.Thread):
     def __init__(self, camera_id, source):
         super().__init__(daemon=True, name=f"reader-{camera_id}")
