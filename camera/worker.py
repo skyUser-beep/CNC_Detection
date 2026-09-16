@@ -192,7 +192,8 @@ class CameraWorker(threading.Thread):
         try:
             results = self.person_detector.track(frame)
             persons = self._extract_persons(results)
-            persons, inside,events = self.safety.update(persons, video_time, len(self.zones))
+            persons, inside, events = self.safety.update(persons,video_time,len(self.zones))
+
             for event in events:
                 self.event_manager.screenshot(
                     self.camera_id,
@@ -202,22 +203,37 @@ class CameraWorker(threading.Thread):
                     event["track_ids"],
                     event.get("zone")
                 )
-            self._check_phones(frame, persons, video_time, frame_number)
+            self._check_phones(frame,persons,
+                video_time,frame_number
+            )
+            display_persons = self.safety.get_display_persons(
+                video_time
+            )
+
             with self.state_lock:
-                self.latest_persons = [p.copy() for p in persons]
-                self.latest_inside = {k: set(v) for k, v in inside.items()}
+                self.latest_persons = [p.copy()
+                    for p in display_persons
+                ]
+                self.latest_inside = { k: set(v)
+                    for k, v in inside.items()
+                }
                 self.latest_raw = frame.copy()
                 self.latest_video_time = video_time
                 self.latest_frame_number = frame_number
+
                 self.processed_frames += 1
                 elapsed = time.perf_counter() - self.fps_counter_start
+
                 if elapsed >= 1.0:
                     self.processing_fps = self.processed_frames / elapsed
+
                     self.processed_frames = 0
                     self.fps_counter_start = time.perf_counter()
+
         except Exception as exc:
             self.error = exc
             self.running = False
+
             print(f"[{self.camera_id}] processing error: {exc}")
 
     def run(self):

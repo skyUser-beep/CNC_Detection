@@ -45,9 +45,9 @@ phone_model_path = str(phone_model_path)
 
 person_model_path = model_path
 phone_class_id = 67
-person_confidence = 0.20
+person_confidence = 0.30
 phone_confidence = 0.50
-person_image_size = 512
+person_image_size =640
 phone_image_size = 512
 person_use_augment = False
 person_detection_interval = 1
