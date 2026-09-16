@@ -77,6 +77,10 @@ You can also double-click `run.bat` after Python and dependencies are installed.
 - More than one person in the same work zone for 2 minutes -> event + screenshot + 30-minute cooldown.
 - Person away from a zone for more than 5 minutes -> event.
 - Phone detected in a work zone -> immediate event + screenshot.
+- A phone event is raised only when the phone detection is inside the detected
+  person's bounding box; nearby phones or machine controls are ignored.
+- A person is considered present when any part of their bounding box overlaps
+  a work zone.
 - Duplicate boxes are suppressed before counting.
 - Recent track history is transferred when BoT-SORT changes an ID and the new detection is spatially close to the previous track.
 

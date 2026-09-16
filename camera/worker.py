@@ -109,9 +109,12 @@ class CameraWorker(threading.Thread):
         xyxy = boxes.xyxy.cpu().numpy()
         ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [None] * len(xyxy)
         confs = boxes.conf.cpu().numpy().tolist() if boxes.conf is not None else [0.0] * len(xyxy)
-        for box, track_id, confidence in zip(xyxy, ids, confs):
+        for index, (box, track_id, confidence) in enumerate(zip(xyxy, ids, confs)):
+            # Track IDs can be absent briefly while BoT-SORT initializes.
+            # Negative temporary IDs let SafetyRules retain the detection and
+            # transfer its state when a real tracker ID appears.
             if track_id is None:
-                continue
+                track_id = -(index + 1)
             x1, y1, x2, y2 = map(int, box)
             persons.append({
                 "id": int(track_id),
@@ -139,6 +142,10 @@ class CameraWorker(threading.Thread):
                 person["x1"],person["y1"],
                 person["x2"], person["y2"]
             )
+            boxes = [
+                box for box in boxes
+                if self._phone_belongs_to_person(box, person)
+            ]
             if not boxes:
                 continue
 
@@ -188,6 +195,15 @@ class CameraWorker(threading.Thread):
             # Prevent repeated phone events for this track
             self.safety.mark_phone(track_id)
             print(f"[{self.camera_id}] PHONE DETECTED | Track {track_id} | Zone {zone + 1} | {video_time:.2f}s")
+
+    @staticmethod
+    def _phone_belongs_to_person(phone_box, person):
+        phone_center_x = (phone_box["x1"] + phone_box["x2"]) / 2
+        phone_center_y = (phone_box["y1"] + phone_box["y2"]) / 2
+        return (
+            person["x1"] <= phone_center_x <= person["x2"]
+            and person["y1"] <= phone_center_y <= person["y2"]
+        )
 
     def _process_one(self, frame, frame_number, video_time):
         try:

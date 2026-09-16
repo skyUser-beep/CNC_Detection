@@ -54,21 +54,23 @@ class ZoneManager:
 
     @classmethod
     def person_zone(cls, masks, x1, y1, x2, y2):
-        cx = (x1 + x2) / 2
-        cy = (y1 + y2) / 2
-        width = max(1, x2 - x1)
-        height = max(1, y2 - y1)
-        points = [(cx, y2), (cx, y1 + height * 0.75), (cx, cy),
-                  (x1 + width * 0.25, y1 + height * 0.75),
-                  (x1 + width * 0.75, y1 + height * 0.75)]
         best_zone = None
         best_score = 0
         for index, mask in enumerate(masks):
-            score = sum(cls.point_inside(mask, px, py) for px, py in points)
+            height, width = mask.shape
+            left = max(0, min(width, int(x1)))
+            top = max(0, min(height, int(y1)))
+            right = max(0, min(width, int(x2)))
+            bottom = max(0, min(height, int(y2)))
+            if right <= left or bottom <= top:
+                continue
+            # A person is present when any part of their detected box is
+            # inside the (already margin-expanded) work-zone mask.
+            score = cv2.countNonZero(mask[top:bottom, left:right])
             if score > best_score:
                 best_score = score
                 best_zone = index
-        return best_zone if best_score >= 2 else None
+        return best_zone
 
     @staticmethod
     def draw(frame, zones):
