@@ -7,7 +7,6 @@ def format_timestamp(seconds):
         f"{int((seconds % 3600) // 60):02d}:"
         f"{int(seconds % 60):02d}"
     )
-
 class EventManager:
     def __init__(self, output_dir):
         self.base = Path(output_dir) / "cameras"

@@ -1,0 +1,24 @@
+# BoT-SORT tracker config for GPU deployment, with appearance ReID enabled.
+# Same defaults as Ultralytics' stock botsort.yaml, except with_reid: True.
+# ReID makes track IDs survive occlusion / brief disappearance much better,
+# because matching uses appearance embeddings, not just box position + IoU.
+# CPU cost is real, so this is meant to be used once you have a GPU.
+
+tracker_type: botsort          # ['botsort', 'bytetrack']
+track_high_thresh: 0.25        # first-association match threshold
+track_low_thresh: 0.1          # second-association (low-score) threshold
+new_track_thresh: 0.25         # start a new track if nothing matches above this
+track_buffer: 30               # frames to keep a lost track alive before dropping it
+match_thresh: 0.8              # association similarity threshold
+fuse_score: True               # fuse detection confidence into the matching cost
+
+# BoT-SORT-specific
+gmc_method: sparseOptFlow      # global motion compensation (camera is static here, cheap)
+proximity_thresh: 0.5          # IoU gate before appearance is even checked
+appearance_thresh: 0.25        # min appearance similarity to accept a ReID match
+with_reid: True                # <-- the actual switch; default is False
+model: auto                    # reuse the detector's own features for embeddings
+                                # (cheapest ReID option; swap in a dedicated
+                                # small ReID .pt/.onnx checkpoint here later if
+                                # you want stronger re-identification and have
+                                # the GPU headroom for it)

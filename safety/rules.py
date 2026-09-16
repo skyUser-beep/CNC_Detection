@@ -332,6 +332,15 @@ class SafetyRules:
             for lock in locks:
                 if not lock["inside"]:
                     continue
+                # Safety state stays PRESENT even while YOLO is
+                # momentarily missing this person (see the "continue"
+                # in update() for matched is None). But we don't want
+                # to keep drawing a box that hasn't been refreshed in
+                # a while, so this is a display-only cutoff -- it does
+                # NOT touch lock["inside"] or start the away timer.
+                stale_for = current_time - lock.get("last_seen", current_time)
+                if stale_for > self.inside_grace:
+                    continue
                 x1, y1, x2, y2 = lock["box"]
                 display_persons.append({"id": lock["track_id"],
                     "person_key": lock["person_key"],

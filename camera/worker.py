@@ -28,6 +28,7 @@ class CameraWorker(threading.Thread):
             config.person_model_path, device, half,
             config.person_confidence, config.person_image_size,
             config.person_use_augment,
+            config.person_tracker_config,
         )
         self.zones = None
         self.zone_masks = None
