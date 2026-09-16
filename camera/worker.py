@@ -1,8 +1,8 @@
-import threading
-import time
-import cv2
+import threading # Allows each camers worker to run independently
+import time # Measures processing FPS and add small waits
+import cv2 # draws bounding box and annotations for phone event screenshots
 
-from detection.person_detector import PersonDetector
+from detection.person_detector import PersonDetector 
 from detection.phone_detector import PhoneDetector
 from events.event_manager import EventManager
 from zones.zone_manager import ZoneManager
@@ -27,8 +27,7 @@ class CameraWorker(threading.Thread):
         self.person_detector = PersonDetector(
             config.person_model_path, device, half,
             config.person_confidence, config.person_image_size,
-            config.person_use_augment,
-            config.person_tracker_config,
+            config.person_use_augment,config.person_tracker_config,
         )
         self.zones = None
         self.zone_masks = None
@@ -278,3 +277,5 @@ class CameraWorker(threading.Thread):
             self.running = False
             if self.reader is not None:
                 self.reader.stop()
+
+#  Worker gets the frame from Reader and check frame number has changed

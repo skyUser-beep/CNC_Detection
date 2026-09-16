@@ -1,8 +1,9 @@
-import threading
-import time
-from pathlib import Path
-import cv2
+import threading # runs the camers reader independently of the detection process
+import time # controls timing and frame-reading speed
+from pathlib import Path # checks whether a source is a local file
+import cv2 # opens cameras/videos and reads frames
 # only responsible for getting frames from the camera reading video/RTSP stream
+
 class CameraReader(threading.Thread):
     def __init__(self, camera_id, source):
         super().__init__(daemon=True, name=f"reader-{camera_id}")
@@ -25,10 +26,10 @@ class CameraReader(threading.Thread):
         self.latest_video_time = 0.0
         self.finished = False
         self.stop_event = threading.Event()
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()  # Lock protects shared variables while they are being updated or read.
         self.current_frame_number = 0
 
-    def run(self):
+    def run(self): 
         next_frame_time = time.perf_counter()
         while not self.stop_event.is_set():
             ret, frame = self.cap.read()
@@ -55,11 +56,14 @@ class CameraReader(threading.Thread):
 
         self.cap.release()
 
-    def get_latest(self):
+    def get_latest(self): # Updating the latest frame  called by worker.py
         with self.lock:
             if self.latest_frame is None:
                 return None, -1, 0.0
             return self.latest_frame.copy(), self.latest_frame_number, self.latest_video_time
 
-    def stop(self):
+    def stop(self): 
         self.stop_event.set()
+
+
+# Camera - Reader reads a frame , Latest frame is stored
