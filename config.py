@@ -13,7 +13,6 @@ outputs_dir = data_dir / "outputs"
 for folder in (videos_dir, models_dir, outputs_dir):
     folder.mkdir(parents=True, exist_ok=True)
 
-
 def resolve_path(value, default):
     raw = os.getenv(value, default)
     path = Path(raw).expanduser()
@@ -73,7 +72,6 @@ display_width = 900
 multiple_limit_seconds=120
 duplicate_iou_threshold = 0.65
 duplicate_center_ratio = 0.25
-
 
 # Backward-compatible aliases.
 model_path = model_path
