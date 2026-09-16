@@ -48,7 +48,7 @@ class CameraWorker(threading.Thread):
         self.startup_ready = threading.Event()
         self.error = None
 
-    def prepare(self):
+    def prepare(self): #prepares one camera before the worker starts processing frames
         from camera.reader import CameraReader
         self.reader = CameraReader(self.camera_id, self.source)
         self.width, self.height, self.fps = self.reader.width, self.reader.height, self.reader.fps
@@ -219,12 +219,8 @@ class CameraWorker(threading.Thread):
                     event["track_ids"],
                     event.get("zone")
                 )
-            self._check_phones(frame,persons,
-                video_time,frame_number
-            )
-            display_persons = self.safety.get_display_persons(
-                video_time
-            )
+            self._check_phones(frame,persons,video_time,frame_number)
+            display_persons = self.safety.get_display_persons(video_time)
 
             with self.state_lock:
                 self.latest_persons = [p.copy()

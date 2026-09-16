@@ -28,8 +28,7 @@ class PhoneDetector:
             return []
         try:
             with self.lock:
-                results = self.model.predict(
-                    crop,
+                results = self.model.predict(crop,
                     imgsz=self.image_size,
                     conf=self.confidence,
                     classes=[self.class_id],

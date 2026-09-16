@@ -5,11 +5,7 @@ from zones.zone_manager import ZoneManager
 class Renderer:
     def __init__(self, display_width):
         self.display_width = display_width
-    def render(self,
-        frame,camera_id,
-        video_time,zones,
-        persons,inside,
-        safety,processing_fps,):
+    def render(self,frame,camera_id,video_time,zones,persons,inside,safety,processing_fps,):
         frame = ZoneManager.draw(frame,zones )
         for person in persons:
             x1 = person["x1"]
@@ -17,10 +13,7 @@ class Renderer:
             x2 = person["x2"]
             y2 = person["y2"]
             zone = person["zone"]
-            person_key = person.get(
-                "person_key",
-                person["id"]
-            )
+            person_key = person.get("person_key",person["id"])
             track_id = person["id"]
             # Locked persons returned by SafetyRules are
             # always inside a work zone.
@@ -44,13 +37,10 @@ class Renderer:
             cv2.rectangle(frame,
                 (x1, y1),(x2, y2),
                 color,
-                2,
-            )
+                2,)
 
             cv2.putText(frame, label,
-                (
-                    x1,max(25, y1 - 8)
-                ),
+                (x1,max(25, y1 - 8)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55, color,
                 2,
@@ -66,12 +56,10 @@ class Renderer:
             frame,0.35,
             0,)
 
-        lines = [
-            f"{camera_id} | Video: {format_timestamp(video_time)}",
+        lines = [f"{camera_id} | Video: {format_timestamp(video_time)}",
             f"Processing FPS: {processing_fps:.1f}",
             f"People in zones: {sum(len(v) for v in inside.values())}",
-            f"Work zones: {len(zones)}",
-        ]
+            f"Work zones: {len(zones)}",]
         y = 38
         for line in lines:
             cv2.putText(frame,line,
@@ -86,14 +74,14 @@ class Renderer:
             inside_ids = inside.get(z,set())
             count = len(inside_ids)
             cooldown = safety.cooldown_until.get(z)
+
             if cooldown is not None and video_time < cooldown:
                 remaining = cooldown- video_time
-
                 text = f"Zone {z + 1}: COOLDOWN {format_timestamp(remaining)}"
                 color = (0, 165, 255)
+                
             elif count > 1  and safety.multiple_start.get(z) is not None:
                 elapsed = video_time- safety.multiple_start[z]
-
                 text = f"Zone {z + 1}: {count} PEOPLE {elapsed:.0f}/{safety.multiple_limit_seconds}s"
                 color = (0, 255, 255)
 
@@ -103,21 +91,13 @@ class Renderer:
             cv2.putText(frame, text,
                 (25, y),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.55, color,
-                2,
-            )
+                0.55, color,2,)
+
             y += 25
 
         cv2.putText(frame,
-            (
-                "Click window = select | "
-                "Z = redraw zones | "
-                "Q = quit"
-            ),
-            (
-                25,min(frame.shape[0] - 10, y + 5
-                ),
-            ),
+            ("Click window = select | Z = redraw zones | Q = quit"),
+            (25,min(frame.shape[0] - 10, y + 5),),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
             (255, 255, 255),
@@ -131,3 +111,6 @@ class Renderer:
                 interpolation=cv2.INTER_AREA,
             )
         return frame
+
+# The Renderer is the visual display component of your CNC monitoring system. It helps you see what the AI detects and what the
+# safety system currently believes is happening.
