@@ -1,5 +1,5 @@
 import cv2
-import torch
+import torch # Used to detect whether a CUDA-compatible GPU is available
 
 import config
 from camera.worker import CameraWorker
