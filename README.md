@@ -65,6 +65,30 @@ python -m monitoring.main
 
 You can also double-click `run.bat` after Python and dependencies are installed.
 
+## Dashboard API
+
+The web dashboard can control this detector without importing its Python
+modules. Start the API from this directory:
+
+```bat
+python -m uvicorn api:app --host 127.0.0.1 --port 9000
+```
+
+Check that it is running:
+
+```text
+http://127.0.0.1:9000/health
+```
+
+Start the dashboard separately from the `cnc_web_v1` project:
+
+```bat
+python -m uvicorn web.app:app --host 127.0.0.1 --port 8000
+```
+
+The dashboard uses `http://127.0.0.1:9000` by default. Set
+`CNC_BACKEND_URL` if the API runs on another host or port.
+
 ## Controls
 
 - `Q`: quit

@@ -1,4 +1,5 @@
 from pathlib import Path
+import csv
 import cv2
 
 def format_timestamp(seconds):
@@ -70,3 +71,31 @@ class EventManager:
 
         print(f"SCREENSHOT SAVED: {path}")
         return path
+
+    def list_events(self, limit=100):
+        records = []
+        for camera_dir in self.base.glob("*"):
+            events_path = camera_dir / "events.csv"
+            if not events_path.is_file():
+                continue
+            with events_path.open("r", encoding="utf-8", newline="") as file:
+                for row in csv.DictReader(file):
+                    timestamp = row.get("timestamp", "")
+                    event_type = row.get("event", "")
+                    screenshot_prefix = timestamp.replace(":", "-")
+                    screenshots = sorted(
+                        (camera_dir / "screenshots").glob(
+                            f"{screenshot_prefix}_{event_type}_*.jpg"
+                        )
+                    )
+                    records.append({
+                        "camera_id": camera_dir.name,
+                        "timestamp": timestamp,
+                        "video_time": float(row.get("video_time") or 0),
+                        "event_type": event_type,
+                        "track_ids": row.get("track_ids", ""),
+                        "details": row.get("details", ""),
+                        "screenshot": screenshots[-1].name if screenshots else None,
+                    })
+        records.sort(key=lambda event: (event["camera_id"], event["video_time"]), reverse=True)
+        return records[:limit]

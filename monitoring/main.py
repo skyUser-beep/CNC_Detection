@@ -1,5 +1,10 @@
-import cv2
-import torch # Used to detect whether a CUDA-compatible GPU is available
+import threading
+from typing import Dict
+
+import torch
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 import config
 from camera.worker import CameraWorker
@@ -7,103 +12,151 @@ from detection.phone_detector import PhoneDetector
 from events.event_manager import EventManager
 from zones.zone_manager import ZoneManager
 
+
+app = FastAPI(title="CNC Detection Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class StartRequest(BaseModel):
+    camera_id: str
+    source: str
+    max_persons: int = 1
+    multiple_limit_seconds: int = 120
+    absence_limit_seconds: int = 300
+
+
+workers: Dict[str, CameraWorker] = {}
+workers_lock = threading.Lock()
+events = EventManager(config.outputs_dir)
+zones = ZoneManager(config.outputs_dir, config.zone_margin_px)
+
+
 def choose_device():
     if torch.cuda.is_available():
-        print("CUDA GPU DETECTED")
-        print("GPU:", torch.cuda.get_device_name(0))
-        try:
-            torch.backends.cudnn.benchmark = True
-            torch.set_float32_matmul_precision("high")
-        except Exception:
-            pass
         return 0, True
-    print("CUDA NOT AVAILABLE - using CPU")
     return "cpu", False
 
-def main():
-    print("\nCNC 4 CAMERA MONITORING - REFACTORED\n")
-    if not config.cameras:
-        print("No cameras configured. Edit .env first.")
-        return
 
+def create_worker(request: StartRequest):
     device, half = choose_device()
-    events = EventManager(config.outputs_dir)
-    zones = ZoneManager(config.outputs_dir, config.zone_margin_px)
-    print("Loading shared phone model...")
-    phone_detector = PhoneDetector(config.phone_model_path, device, half, config.phone_confidence, config.phone_image_size, config.phone_class_id)
 
-    workers = {}
-    for camera_id, source in config.cameras.items():
+    phone_detector = PhoneDetector(
+        config.phone_model_path,
+        device,
+        half,
+        config.phone_confidence,
+        config.phone_image_size,
+        config.phone_class_id,
+    )
+
+    # Copy the configured values and override them for this dashboard machine.
+    worker_config = config
+    worker_config.multiple_person_limit_seconds = (
+        request.multiple_limit_seconds
+    )
+    worker_config.absence_limit_seconds = request.absence_limit_seconds
+
+    worker = CameraWorker(
+        request.camera_id,
+        request.source,
+        worker_config,
+        device,
+        half,
+        phone_detector,
+        events,
+        zones,
+    )
+
+    if not worker.prepare():
+        raise RuntimeError("CameraWorker could not prepare the camera")
+
+    worker.startup_ready.set()
+    worker.start()
+
+    return worker
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/detection/start")
+def start_detection(request: StartRequest):
+    with workers_lock:
+        existing = workers.get(request.camera_id)
+
+        if existing and existing.is_alive() and existing.running:
+            return {
+                "camera_id": request.camera_id,
+                "running": True,
+                "message": "Already running",
+            }
+
         try:
-            worker = CameraWorker(camera_id, source, config, device, half, phone_detector, events, zones)
-            if not worker.prepare():
-                continue
-            worker.startup_ready.set()
-            worker.start()
-            workers[camera_id] = worker
-            print(f"{camera_id} READY")
+            worker = create_worker(request)
         except Exception as exc:
-            print(f"FAILED TO START {camera_id}: {exc}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start detection: {exc}",
+            ) from exc
 
-    if not workers:
-        print("No cameras could be started.")
-        return
+        workers[request.camera_id] = worker
 
-    windows = {camera_id: f"CNC - {camera_id}" for camera_id in workers}
-    for name in windows.values():
-        cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    return {
+        "camera_id": request.camera_id,
+        "running": True,
+    }
 
-    selected_camera = next(iter(workers))
 
-    def callback_for(camera_id):
-        def callback(event, x, y, flags, param):
-            nonlocal selected_camera
-            if event == cv2.EVENT_LBUTTONDOWN:
-                selected_camera = camera_id
-                print(f"Selected camera: {camera_id}")
-        return callback
+@app.post("/detection/{camera_id}/stop")
+def stop_detection(camera_id: str):
+    with workers_lock:
+        worker = workers.get(camera_id)
 
-    for camera_id, window in windows.items():
-        cv2.setMouseCallback(window, callback_for(camera_id))
+        if worker is None:
+            return {
+                "camera_id": camera_id,
+                "running": False,
+            }
 
-    try:
-        while workers:
-            finished = []
-            for camera_id, worker in list(workers.items()):
-                if not worker.is_alive() or not worker.running:
-                    finished.append(camera_id)
-                    continue
-                display = worker.get_display()
-                if display is not None:
-                    cv2.imshow(windows[camera_id], display)
+        worker.running = False
 
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
-                break
-            if key == ord("z") and selected_camera in workers:
-                workers[selected_camera].redraw_zones()
+        if worker.reader is not None:
+            worker.reader.stop()
 
-            for camera_id in finished:
-                worker = workers.pop(camera_id)
-                worker.running = False
-                if worker.reader is not None:
-                    worker.reader.stop()
-                try:
-                    cv2.destroyWindow(windows[camera_id])
-                except Exception:
-                    pass
-            if not workers:
-                break
-    finally:
-        for worker in workers.values():
-            worker.running = False
-            if worker.reader is not None:
-                worker.reader.stop()
-        for worker in workers.values():
-            worker.join(timeout=2)
-        cv2.destroyAllWindows()
+    return {
+        "camera_id": camera_id,
+        "running": False,
+    }
 
-    print("\nCNC 4 CAMERA MONITORING FINISHED")
 
-if __name__ == "__main__":
-    main()
+@app.get("/detection/{camera_id}/status")
+def detection_status(camera_id: str):
+    with workers_lock:
+        worker = workers.get(camera_id)
+
+        if worker is None:
+            return {
+                "camera_id": camera_id,
+                "running": False,
+                "people_inside": 0,
+            }
+
+        safety = getattr(worker, "safety", None)
+        people_inside = int(
+            getattr(safety, "number_inside", 0)
+        ) if safety else 0
+
+        return {
+            "camera_id": camera_id,
+            "running": bool(worker.is_alive() and worker.running),
+            "people_inside": people_inside,
+        }
