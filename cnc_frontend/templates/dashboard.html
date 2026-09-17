@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CNC Monitoring Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <div><h1>CNC Monitoring</h1><p>Admin control dashboard • RTSP cameras</p></div>
+      <span class="pill">Web V1</span>
+    </header>
+
+    <section class="panel">
+      <h2>Add CNC machine</h2>
+      <form method="post" action="/machines" class="form-grid">
+        <label>Machine name<input name="name" required placeholder="CNC Machine 01"></label>
+        <label>RTSP URL<input name="rtsp_url" required placeholder="rtsp://user:password@camera-ip/stream"></label>
+        <label>Maximum people<input name="max_persons" type="number" min="1" max="50" value="1" required></label>
+        <label>Occupancy delay (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="120" required></label>
+        <label>Absence delay (seconds)<input name="absence_limit_seconds" type="number" min="1" value="300" required></label>
+        <div class="form-actions"><button type="submit">Save machine</button></div>
+      </form>
+      <p class="hint">Use the authorized occupancy limit from your machine safety procedure. The limit is not inferred automatically from polygon size.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Registered machines</h2>
+      {% if machines %}
+      <div class="cards">
+      {% for machine in machines %}
+        <article class="machine-card">
+          <div class="card-top"><h3>{{ machine.name }}</h3><span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span></div>
+          {% if machine.runtime.running %}
+          <img class="live-video" src="http://127.0.0.1:9000/detection/camera_{{ '%02d'|format(machine.id) }}/stream" alt="Live video for {{ machine.name }}">
+          {% else %}
+          <div class="video-placeholder">Start monitoring to view live video.</div>
+          {% endif %}
+          <p class="rtsp"><strong>RTSP:</strong> {{ machine.rtsp_url }}</p>
+          <div class="metrics"><div><b>{{ machine.runtime.people_inside }}</b><small>People inside</small></div><div><b>{{ machine.max_persons }}</b><small>Max allowed</small></div><div><b>{{ machine.multiple_limit_seconds }}s</b><small>Occupancy delay</small></div></div>
+          {% if machine.runtime.zones %}
+          <div class="zone-statuses">
+            {% for zone in machine.runtime.zones %}
+            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present / {{ zone.allowed }} allowed</span></div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <form method="post" action="/machines/{{ machine.id }}/settings" class="settings-form">
+            <div class="zone-limits">
+            {% for zone in machine.runtime.zones %}
+            <label>Zone {{ zone.zone }} allowed<input name="zone_limit_{{ zone.zone }}" type="number" min="1" max="50" value="{{ zone.allowed }}" required></label>
+            {% endfor %}
+            </div>
+            <label>Default people limit<input name="max_persons" type="number" min="1" max="50" value="{{ machine.max_persons }}" required></label>
+            <label>Event delay (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="{{ machine.multiple_limit_seconds }}" required></label>
+            <label>Absence delay (seconds)<input name="absence_limit_seconds" type="number" min="1" value="{{ machine.absence_limit_seconds }}" required></label>
+            <button type="submit">Update settings</button>
+          </form>
+          {% if machine.runtime.last_error %}<p class="error">{{ machine.runtime.last_error }}</p>{% endif %}
+          <div class="actions">
+            <form method="post" action="/machines/{{ machine.id }}/start"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %}>Stop</button></form>
+            <a class="button secondary" href="/api/machines/{{ machine.id }}/status">Status JSON</a>
+          </div>
+          <p class="hint">Live preview is supplied by the CNC detection backend.</p>
+        </article>
+      {% endfor %}
+      </div>
+      {% else %}<p class="muted">No machines registered yet.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="card-top"><h2>Recent events</h2><a href="/api/events">JSON</a></div>
+      <div class="table-wrap"><table><thead><tr><th>CCTV time</th><th>Machine</th><th>Event</th><th>Details</th><th>Screenshot</th></tr></thead><tbody>
+      {% for event in events %}<tr><td>{{ event.timestamp }}</td><td>{{ event.camera_id }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}{% if event.track_ids %}<br><small>Track IDs: {{ event.track_ids }}</small>{% endif %}</td><td>{% if event.screenshot_url %}<a href="http://127.0.0.1:9000{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No events yet.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </section>
+  </main>
+</body>
+</html>

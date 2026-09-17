@@ -18,11 +18,13 @@ ENV/
 *.onnx
 *.engine
 
+
 *.mp4
 *.avi
 *.mov
 *.mkv
 *.wmv
+
 
 data/outputs/*
 !data/outputs/.gitkeep
@@ -30,16 +32,35 @@ data/outputs/*
 data/videos/*
 !data/videos/.gitkeep
 
+# Backend runtime data
+cnc_backend/data/outputs/*
+cnc_backend/data/videos/*
+cnc_backend/data/screenshots/*
+cnc_backend/data/events/*
+
+# Frontend runtime data
+cnc_frontend/data/outputs/*
+cnc_frontend/data/screenshots/*
+cnc_frontend/data/events/*
+
+
 data/images/
 data/labels/
 runs/
 datasets/
 
+
 *.log
 logs/
+
+
+*.sqlite3
+*.db
+
 
 .idea/
 .vscode/
 
 .DS_Store
 Thumbs.db
+
