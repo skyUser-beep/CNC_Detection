@@ -63,6 +63,11 @@ python -m pip install -r requirements.txt
 python -m monitoring.main
 ```
 
+Phone detection uses `PHONE_MODEL_PATH`, `PHONE_CONFIDENCE`,
+`PHONE_DETECTION_INTERVAL`, and `PHONE_CLASS_ID` from `.env`. The default
+COCO model uses class `67` (`cell phone`), but a phone-specific YOLO model
+usually performs better for small phones in CCTV footage.
+
 You can also double-click `run.bat` after Python and dependencies are installed.
 
 ## Dashboard API

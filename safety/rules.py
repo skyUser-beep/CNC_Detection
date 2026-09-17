@@ -8,6 +8,17 @@ class SafetyRules:
         self.multiple_limit = config.multiple_person_limit_seconds
 
         self.multiple_limit_seconds = config.multiple_person_limit_seconds
+        configured_limits = getattr(config, "allowed_people_per_zone", 1)
+        if isinstance(configured_limits, dict):
+            self.allowed_people_per_zone = [
+                max(1, int(configured_limits.get(f"zone_{index + 1}", 1)))
+                for index in range(zones_count)
+            ]
+        else:
+            self.allowed_people_per_zone = [
+                max(1, int(configured_limits))
+                for _ in range(zones_count)
+            ]
 
         self.cooldown_seconds = config.multiple_person_cooldown_seconds
 
@@ -43,6 +54,7 @@ class SafetyRules:
         }
         self.next_person_key = 1
         self.number_inside = 0
+        self.current_zone_counts = [0 for _ in range(zones_count)]
 
     def update(self,persons,current_time,zone_count,):
         events = []
@@ -53,6 +65,8 @@ class SafetyRules:
             self.multiple_start.setdefault(z, None)
             self.cooldown_until.setdefault(z, None)
             self.multiple_logged.setdefault(z, False)
+            if z >= len(self.allowed_people_per_zone):
+                self.allowed_people_per_zone.append(1)
 
         persons, suppressed = deduplicate_persons(persons,
             self.duplicate_iou,self.duplicate_center,
@@ -283,7 +297,8 @@ class SafetyRules:
                 self.cooldown_until[z] = None
                 self.multiple_logged[z] = False
 
-            if count > 1:
+            allowed = self.allowed_people_per_zone[z]
+            if count > allowed:
                 if self.multiple_start[z] is None:
 
                     self.multiple_start[z] = current_time
@@ -296,8 +311,9 @@ class SafetyRules:
                 if elapsed >= self.multiple_limit and not self.multiple_logged[z]:
                     self.multiple_logged[z] = True
 
-                    event_type = "MULTIPLE_PEOPLE_OVER_2_MINUTES"
+                    event_type = "PEOPLE_OVER_ALLOWED_LIMIT"
                     details = (f"{count} people inside zone {z + 1} "
+                        f"(limit: {allowed}) "
                         f"for {elapsed:.1f} seconds; "
                         f"30 minutes cooldown started"
                     )
@@ -324,6 +340,7 @@ class SafetyRules:
 
         self.number_inside = sum(len(v)
             for v in inside.values())
+        self.current_zone_counts = [len(inside[z]) for z in range(zone_count)]
         return persons, inside, events
 
     def get_display_persons(self, current_time):

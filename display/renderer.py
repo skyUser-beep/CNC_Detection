@@ -145,7 +145,7 @@ class Renderer:
                 text = (f"Zone {z + 1}: COOLDOWN {format_timestamp(remaining)}")
                 color = (0, 165, 255)
 
-            elif count > 1 and safety.multiple_start.get(z) is not None:
+            elif count > safety.allowed_people_per_zone[z] and safety.multiple_start.get(z) is not None:
                 elapsed = video_time - safety.multiple_start[z]
                 
                 text = (

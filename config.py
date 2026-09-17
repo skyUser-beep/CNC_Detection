@@ -80,9 +80,9 @@ person_use_augment = (os.getenv("PERSON_USE_AUGMENT", "false").strip().lower()==
 
 person_detection_interval = 1
 
-phone_detection_interval = 6
+phone_detection_interval = int(os.getenv("PHONE_DETECTION_INTERVAL", "3"))
 
-phone_class_id = 67
+phone_class_id = int(os.getenv("PHONE_CLASS_ID", "67"))
 
 person_tracker_config = os.getenv("PERSON_TRACKER_CONFIG","botsort.yaml")
 

@@ -14,6 +14,16 @@ class PhoneDetector:
         self.image_size = image_size
         self.class_id = class_id
         self.lock = threading.Lock()
+        label = self.model.names.get(self.class_id)
+        if label is None:
+            raise ValueError(
+                f"PHONE_CLASS_ID={self.class_id} is not present in "
+                f"{model_path}; available classes: {self.model.names}"
+            )
+        print(
+            f"Phone detector: {model_path} | "
+            f"class {self.class_id} = {label} | confidence >= {self.confidence}"
+        )
 
     def detect_in_person(self, frame, x1, y1, x2, y2, padding=40):
         h, w = frame.shape[:2]

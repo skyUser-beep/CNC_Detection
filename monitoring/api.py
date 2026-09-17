@@ -2,6 +2,7 @@ import copy
 import traceback
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from types import ModuleType
 
@@ -33,6 +34,7 @@ class StartRequest(BaseModel):
     max_persons: int = Field(default=1, ge=1, le=50)
     multiple_limit_seconds: int = Field(default=120, ge=1)
     absence_limit_seconds: int = Field(default=300, ge=1)
+    zone_limits: dict[str, int] = Field(default_factory=dict)
 
 
 def choose_device():
@@ -65,6 +67,9 @@ def make_worker(request: StartRequest):
                     value = value
                 setattr(worker_config, name, value)
 
+    worker_config.allowed_people_per_zone = (
+        request.zone_limits or request.max_persons
+    )
     worker_config.multiple_limit_seconds = request.multiple_limit_seconds
     worker_config.multiple_person_limit_seconds = request.multiple_limit_seconds
     worker_config.absence_limit_seconds = request.absence_limit_seconds
@@ -173,11 +178,20 @@ def detection_status(camera_id: str):
                 "last_error": error,
             }
         safety = worker.safety
+        zone_counts = [
+            {
+                "zone": index + 1,
+                "present": safety.current_zone_counts[index],
+                "allowed": safety.allowed_people_per_zone[index],
+            }
+            for index in range(len(safety.zone_locks))
+        ]
         return {
             "camera_id": camera_id,
             "running": bool(worker.is_alive() and worker.running),
             "starting": is_starting,
             "people_inside": int(getattr(safety, "number_inside", 0)),
+            "zones": zone_counts,
             "last_error": error or (str(worker.error) if worker.error else None),
         }
 
