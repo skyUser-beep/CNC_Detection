@@ -3,6 +3,8 @@ import time # controls timing and frame-reading speed
 from pathlib import Path # checks whether a source is a local file
 import cv2 # opens cameras/videos and reads frames
 # only responsible for getting frames from the camera reading video/RTSP stream
+import os
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]=("rtsp_transport;tcp")
 
 class CameraReader(threading.Thread):
     def __init__(self, camera_id, source):
@@ -64,6 +66,5 @@ class CameraReader(threading.Thread):
 
     def stop(self): 
         self.stop_event.set()
-
 
 # Camera - Reader reads a frame , Latest frame is stored
