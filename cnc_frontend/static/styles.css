@@ -26,6 +26,8 @@ input { width: 100%; min-width: 0; padding: 11px; border-radius: 8px; border: 1p
 button, .button { display: inline-block; border: 0; border-radius: 8px; padding: 11px 15px; background: #2563eb; color: white; text-decoration: none; cursor: pointer; font-weight: 600; white-space: nowrap; }
 button:hover, .button:hover { background: #3b82f6; }
 button:disabled { opacity: .4; cursor: not-allowed; }
+.delete-button { background: #991b1b; padding: 8px 10px; font-size: 16px; }
+.delete-button:hover { background: #dc2626; }
 .secondary { background: #334155; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; }
 .machine-card { min-width: 0; overflow: hidden; border: 1px solid #2d3b50; border-radius: 12px; padding: 16px; background: rgba(15, 23, 42, .45); }

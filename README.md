@@ -76,7 +76,8 @@ The web dashboard can control this detector without importing its Python
 modules. Start the API from this directory:
 
 ```bat
-python -m uvicorn api:app --host 127.0.0.1 --port 9000
+cd cnc_backend
+python -m uvicorn monitoring.api:app --host 127.0.0.1 --port 9000
 ```
 
 Check that it is running:
@@ -88,6 +89,7 @@ http://127.0.0.1:9000/health
 Start the dashboard separately from the `cnc_web_v1` project:
 
 ```bat
+cd cnc_frontend
 python -m uvicorn web.app:app --host 127.0.0.1 --port 8000
 ```
 

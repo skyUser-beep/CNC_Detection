@@ -1,4 +1,6 @@
 import copy
+import asyncio
+import shutil
 import threading
 import time
 from types import SimpleNamespace
@@ -6,7 +8,7 @@ from types import ModuleType
 
 import cv2
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -28,8 +30,18 @@ class StartRequest(BaseModel):
     camera_id: str = Field(min_length=1)
     source: str = Field(min_length=1)
     max_persons: int = Field(default=1, ge=1, le=50)
+    zone_limits: dict[str, int] = Field(default_factory=dict)
     multiple_limit_seconds: int = Field(default=120, ge=1)
     absence_limit_seconds: int = Field(default=300, ge=1)
+
+@app.on_event("shutdown")
+def shutdown_workers():
+    with workers_lock:
+        active_workers = list(workers.values())
+    for worker in active_workers:
+        worker.running = False
+        if worker.reader is not None:
+            worker.reader.stop()
 
 def choose_device():
     if torch.cuda.is_available():
@@ -56,6 +68,9 @@ def make_worker(request: StartRequest):
     worker_config.multiple_limit_seconds = request.multiple_limit_seconds
     worker_config.multiple_person_limit_seconds = request.multiple_limit_seconds
     worker_config.absence_limit_seconds = request.absence_limit_seconds
+    worker_config.allowed_people_per_zone = request.zone_limits or {
+        "zone_1": request.max_persons,
+    }
 
     worker = CameraWorker(
         request.camera_id,
@@ -89,6 +104,12 @@ def list_events():
         )
     return records
 
+@app.delete("/events/{event_id}")
+def delete_event(event_id: str):
+    if not events.delete_event(event_id):
+        raise HTTPException(404, "Event not found")
+    return {"deleted": True}
+
 @app.post("/detection/start")
 def start_detection(request: StartRequest):
     with workers_lock:
@@ -112,6 +133,13 @@ def stop_detection(camera_id: str):
                 worker.reader.stop()
     return {"camera_id": camera_id, "running": False}
 
+@app.delete("/detection/{camera_id}")
+def delete_detection(camera_id: str):
+    stop_detection(camera_id)
+    camera_dir = events.base / camera_id
+    if camera_dir.exists():
+        shutil.rmtree(camera_dir)
+    return {"camera_id": camera_id, "deleted": True}
 
 @app.get("/detection/{camera_id}/status")
 def detection_status(camera_id: str):
@@ -120,25 +148,36 @@ def detection_status(camera_id: str):
         if worker is None:
             return {"camera_id": camera_id, "running": False, "people_inside": 0}
         safety = worker.safety
+        zones = [
+            {
+                "zone": index + 1,
+                "present": int(safety.current_zone_counts[index]),
+                "allowed": safety.allowed_people_per_zone[index],
+            }
+            for index in range(len(safety.current_zone_counts))
+        ]
         return {
             "camera_id": camera_id,
             "running": bool(worker.is_alive() and worker.running),
-            "people_inside": int(getattr(safety, "number_inside", 0)),
+            "people_inside": sum(zone["present"] for zone in zones),
+            "zones": zones,
             "last_error": str(worker.error) if worker.error else None,
         }
 
 @app.get("/detection/{camera_id}/stream")
-def detection_stream(camera_id: str):
+async def detection_stream(camera_id: str, request: Request):
     with workers_lock:
         worker = workers.get(camera_id)
     if worker is None:
         raise HTTPException(404, "Detection camera is not running")
 
-    def frames():
+    async def frames():
         while worker.running and worker.reader is not None:
+            if await request.is_disconnected():
+                break
             frame = worker.get_display()
             if frame is None:
-                time.sleep(0.05)
+                await asyncio.sleep(0.05)
                 continue
             success, encoded = cv2.imencode(".jpg", frame)
             if not success:
@@ -149,7 +188,7 @@ def detection_stream(camera_id: str):
                 + encoded.tobytes()
                 + b"\r\n"
             )
-            time.sleep(0.04)
+            await asyncio.sleep(0.04)
 
     return StreamingResponse(
         frames(),

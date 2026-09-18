@@ -185,12 +185,20 @@ class CameraWorker(threading.Thread):
             details = "Phone detected inside work zone"
 
             # Write CSV event
-            self.event_manager.log(self.camera_id,video_time,event_type,track_id,details)
+            timestamp = self.event_manager.log(
+                self.camera_id, video_time, event_type, track_id, details
+            )
 
             # Save screenshot
-            self.event_manager.screenshot(self.camera_id,
-                shot,video_time,
-                event_type,{track_id},zone)
+            self.event_manager.screenshot(
+                self.camera_id,
+                shot,
+                video_time,
+                event_type,
+                {track_id},
+                zone,
+                timestamp=timestamp,
+            )
             # Prevent repeated phone events for this track
             self.safety.mark_phone(track_id)
             print(f"[{self.camera_id}] PHONE DETECTED | Track {track_id} | Zone {zone + 1} | {video_time:.2f}s")
@@ -217,7 +225,8 @@ class CameraWorker(threading.Thread):
                     video_time,
                     event["event_type"],
                     event["track_ids"],
-                    event.get("zone")
+                    event.get("zone"),
+                    timestamp=event.get("timestamp"),
                 )
             self._check_phones(frame,persons,video_time,frame_number)
             display_persons = self.safety.get_display_persons(video_time)

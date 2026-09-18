@@ -1,6 +1,8 @@
 from pathlib import Path
 import csv
 import cv2
+from datetime import datetime
+import hashlib
 
 def format_timestamp(seconds):
     seconds = max(0.0, float(seconds))
@@ -19,7 +21,7 @@ class EventManager:
         return path
 
     def log(self,camera_id,video_seconds,event_name,track_ids="",details="" ):
-        timestamp = format_timestamp(video_seconds)
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %I:%M:%S %p")
 
         print(f"\nSAFETY EVENT\n Camera    : {camera_id}\n Timestamp : {timestamp}\n Event     : {event_name}")
 
@@ -42,15 +44,19 @@ class EventManager:
                 f"{safe(track_ids)},"
                 f"{safe(details)}\n"
             )
+        return timestamp
 
-    def screenshot(self,camera_id,frame,video_time, event_type,track_ids, zone=None):
+    def screenshot(
+        self, camera_id, frame, video_time, event_type, track_ids, zone=None,
+        timestamp=None,
+    ):
         # Use the same directory structure as camera_dir()
         camera_dir = self.camera_dir(camera_id)
 
         screenshot_dir = camera_dir / "screenshots"
         screenshot_dir.mkdir(parents=True,exist_ok=True)
         # format_timestamp() is a standalone function
-        timestamp = format_timestamp(video_time).replace(":","-")
+        timestamp = (timestamp or format_timestamp(video_time)).replace(":", "-")
         # Make sure track_ids is iterable
         if isinstance(track_ids, (int, str)):
             track_ids = {track_ids}
@@ -72,6 +78,13 @@ class EventManager:
         print(f"SCREENSHOT SAVED: {path}")
         return path
 
+    @staticmethod
+    def _event_id(camera_id, row_number, row):
+        value = f"{camera_id}:{row_number}:{row.get('timestamp', '')}:"
+        value += f"{row.get('video_time', '')}:{row.get('event', '')}:"
+        value += f"{row.get('track_ids', '')}:{row.get('details', '')}"
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
     def list_events(self, limit=100):
         records = []
         for camera_dir in self.base.glob("*"):
@@ -79,7 +92,7 @@ class EventManager:
             if not events_path.is_file():
                 continue
             with events_path.open("r", encoding="utf-8", newline="") as file:
-                for row in csv.DictReader(file):
+                for row_number, row in enumerate(csv.DictReader(file)):
                     timestamp = row.get("timestamp", "")
                     event_type = row.get("event", "")
                     screenshot_prefix = timestamp.replace(":", "-")
@@ -90,6 +103,7 @@ class EventManager:
                     )
                     records.append({
                         "camera_id": camera_dir.name,
+                        "event_id": self._event_id(camera_dir.name, row_number, row),
                         "timestamp": timestamp,
                         "video_time": float(row.get("video_time") or 0),
                         "event_type": event_type,
@@ -99,3 +113,34 @@ class EventManager:
                     })
         records.sort(key=lambda event: (event["camera_id"], event["video_time"]), reverse=True)
         return records[:limit]
+
+    def delete_event(self, event_id):
+        for camera_dir in self.base.glob("*"):
+            events_path = camera_dir / "events.csv"
+            if not events_path.is_file():
+                continue
+            with events_path.open("r", encoding="utf-8", newline="") as file:
+                reader = csv.DictReader(file)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
+            kept = []
+            removed = None
+            for row_number, row in enumerate(rows):
+                if removed is None and self._event_id(camera_dir.name, row_number, row) == event_id:
+                    removed = row
+                else:
+                    kept.append(row)
+            if removed is None:
+                continue
+            with events_path.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(kept)
+            timestamp = removed.get("timestamp", "").replace(":", "-")
+            event_type = removed.get("event", "")
+            for screenshot in (camera_dir / "screenshots").glob(
+                f"{timestamp}_{event_type}_*.jpg"
+            ):
+                screenshot.unlink()
+            return True
+        return False

@@ -78,14 +78,28 @@ def set_active(machine_id, active):
     with connection() as conn:
         conn.execute("UPDATE machines SET active = ? WHERE id = ?", (int(active), machine_id))
 
-def update_machine_settings(machine_id, max_persons, multiple_limit_seconds, absence_limit_seconds, zone_limits):
+def delete_machine(machine_id):
+    with connection() as conn:
+        conn.execute("DELETE FROM events WHERE machine_id = ?", (machine_id,))
+        result = conn.execute("DELETE FROM machines WHERE id = ?", (machine_id,))
+        return result.rowcount > 0
+
+def update_machine_settings(
+    machine_id, max_persons, multiple_limit_seconds, absence_limit_seconds,
+    zone_limits,
+):
     with connection() as conn:
         conn.execute(
             """UPDATE machines
                SET max_persons = ?, multiple_limit_seconds = ?, absence_limit_seconds = ?, zone_limits = ?
                WHERE id = ?""",
-            (max_persons, multiple_limit_seconds, absence_limit_seconds,
-             json.dumps(zone_limits), machine_id),
+            (
+                max_persons,
+                multiple_limit_seconds,
+                absence_limit_seconds,
+                json.dumps(zone_limits),
+                machine_id,
+            ),
         )
 
 def add_event(machine_id, event_type, details):

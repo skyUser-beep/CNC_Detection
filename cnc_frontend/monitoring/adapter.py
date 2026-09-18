@@ -56,6 +56,7 @@ class MonitoringManager:
                 "camera_id": camera_id,
                 "source": machine["rtsp_url"],
                 "max_persons": machine["max_persons"],
+                "zone_limits": machine.get("zone_limits", {}),
                 "multiple_limit_seconds": machine["multiple_limit_seconds"],
                 "absence_limit_seconds": machine["absence_limit_seconds"],
             },
@@ -77,6 +78,9 @@ class MonitoringManager:
                 session.running = bool(result.get("running"))
             return session
 
+    def delete_machine(self, machine_id: int):
+        return self._request("DELETE", f"/detection/{self._camera_id(machine_id)}")
+
     def status(self, machine_id: int):
         try:
             result = self._request(
@@ -93,7 +97,10 @@ class MonitoringManager:
             }
         return {
             "running": bool(result.get("running")),
-            "people_inside": int(result.get("people_inside", 0)),
+            "people_inside": sum(
+                int(zone.get("present", 0)) for zone in result.get("zones", [])
+            ),
+            "zones": result.get("zones", []),
             "last_error": result.get("last_error"),
             "started_at": self._sessions.get(machine_id).started_at
             if machine_id in self._sessions
@@ -102,3 +109,6 @@ class MonitoringManager:
 
     def events(self):
         return self._request("GET", "/events")
+
+    def delete_event(self, event_id):
+        return self._request("DELETE", f"/events/{event_id}")

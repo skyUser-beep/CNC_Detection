@@ -156,7 +156,7 @@ class Renderer:
                 color = (0, 255, 255)
 
             else:
-                text = f"Zone {z + 1}: {count}/1"
+                text = f"Zone {z + 1}: {count}"
                 color = (0, 255, 0)
 
             cv2.putText(frame,text,

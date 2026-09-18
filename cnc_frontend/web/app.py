@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 
 from database.db import (
     init_db, list_machines, get_machine, create_machine, set_active,
-    update_machine_settings, recent_events, add_event
+    update_machine_settings, recent_events, add_event,
+    delete_machine as delete_machine_record,
 )
 from monitoring.adapter import MonitoringManager
 
@@ -83,14 +84,15 @@ async def update_settings(
             zone_number = key.removeprefix("zone_limit_")
             try:
                 zone_limits[f"zone_{int(zone_number)}"] = max(1, min(50, int(value)))
-            except ValueError:
-                raise HTTPException(400, f"Invalid limit for zone {zone_number}")
+            except ValueError as exc:
+                raise HTTPException(400, f"Invalid limit for zone {zone_number}") from exc
     if not zone_limits:
-        zone_limits = {
-            "zone_1": max_persons,
-        }
+        zone_limits = {"zone_1": max_persons}
     update_machine_settings(
-        machine_id, max_persons, multiple_limit_seconds, absence_limit_seconds,
+        machine_id,
+        max_persons,
+        multiple_limit_seconds,
+        absence_limit_seconds,
         zone_limits,
     )
     if manager.status(machine_id)["running"]:
@@ -106,6 +108,18 @@ def stop_machine(machine_id: int):
     set_active(machine_id, False)
     return RedirectResponse(url="/", status_code=303)
 
+@app.post("/machines/{machine_id}/delete")
+def delete_machine(machine_id: int):
+    if not get_machine(machine_id):
+        raise HTTPException(404, "Machine not found")
+    try:
+        manager.delete_machine(machine_id)
+    except RuntimeError as exc:
+        raise HTTPException(502, f"CNC backend could not delete machine: {exc}") from exc
+    if not delete_machine_record(machine_id):
+        raise HTTPException(404, "Machine not found")
+    return RedirectResponse(url="/", status_code=303)
+
 @app.get("/api/machines/{machine_id}/status")
 def machine_status(machine_id: int):
     if not get_machine(machine_id):
@@ -118,3 +132,11 @@ def events():
         return manager.events()
     except RuntimeError as exc:
         raise HTTPException(502, f"CNC backend events unavailable: {exc}") from exc
+
+@app.post("/api/events/{event_id}/delete")
+def delete_event(event_id: str):
+    try:
+        manager.delete_event(event_id)
+    except RuntimeError as exc:
+        raise HTTPException(502, f"CNC backend event deletion failed: {exc}") from exc
+    return RedirectResponse(url="/", status_code=303)

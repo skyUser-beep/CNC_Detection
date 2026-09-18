@@ -136,6 +136,7 @@ class SafetyRules:
                     used_ids=used_ids,
                     center_ratio=self.switch_center,
                     iou_threshold=self.switch_iou,
+                    preferred_track_id=lock["track_id"],
                 )
                 if matched is not None:
                     old_track_id = lock["track_id"]
@@ -190,13 +191,14 @@ class SafetyRules:
                                 f"for {away_duration:.1f} "
                                 f"seconds"
                             )
-                            self.event_manager.log(
+                            timestamp = self.event_manager.log(
                                 self.camera_id,
                                 current_time, event_type,
                                 lock["track_id"],
                                 details,
                             )
                             events.append({
+                                "timestamp": timestamp,
                                 "event_type": event_type,
                                 "track_ids": {
                                     lock["track_id"]
@@ -322,10 +324,11 @@ class SafetyRules:
                     text = "|".join(
                         str(i)
                         for i in sorted(ids))
-                    self.event_manager.log(self.camera_id,
+                    timestamp = self.event_manager.log(self.camera_id,
                         current_time,event_type,
                         text,details,)
                     events.append({
+                        "timestamp": timestamp,
                         "event_type": event_type,
                         "track_ids": ids,
                         "details": details,

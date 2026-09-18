@@ -108,7 +108,14 @@ def find_previous_track(track_states,person,current_time,active_ids,max_seconds,
 
     return best_id
 
-def match_locked_person(locked_box,detections,used_ids=None,center_ratio=1.0,iou_threshold=0.10):
+def match_locked_person(
+    locked_box,
+    detections,
+    used_ids=None,
+    center_ratio=1.0,
+    iou_threshold=0.10,
+    preferred_track_id=None,
+):
 
     if used_ids is None:
         used_ids = set()
@@ -129,6 +136,12 @@ def match_locked_person(locked_box,detections,used_ids=None,center_ratio=1.0,iou
 
     best_person = None
     best_score = -1.0
+
+    # A stable tracker ID is stronger evidence than a box position that may
+    # change as the person moves. Keep the physical lock attached to it.
+    for person in detections:
+        if person["id"] == preferred_track_id and person["id"] not in used_ids:
+            return person
 
     for person in detections:
         track_id = person["id"]
