@@ -23,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class StartRequest(BaseModel):
     camera_id: str
     source: str
@@ -37,12 +36,10 @@ workers_lock = threading.Lock()
 events = EventManager(config.outputs_dir)
 zones = ZoneManager(config.outputs_dir, config.zone_margin_px)
 
-
 def choose_device():
     if torch.cuda.is_available():
         return 0, True
     return "cpu", False
-
 
 def create_worker(request: StartRequest):
     device, half = choose_device()
@@ -115,7 +112,6 @@ def start_detection(request: StartRequest):
         "running": True,
     }
 
-
 @app.post("/detection/{camera_id}/stop")
 def stop_detection(camera_id: str):
     with workers_lock:
@@ -136,7 +132,6 @@ def stop_detection(camera_id: str):
         "camera_id": camera_id,
         "running": False,
     }
-
 
 @app.get("/detection/{camera_id}/status")
 def detection_status(camera_id: str):

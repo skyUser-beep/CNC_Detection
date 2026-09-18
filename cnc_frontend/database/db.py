@@ -49,8 +49,9 @@ def list_machines():
     for machine in machines:
         try:
             machine["zone_limits"] = json.loads(machine["zone_limits"] or "{}")
-        except json.JSONDecodeError:
-            machine["zone_limits"] = {}
+        except json.JSONDecodeError as exc:
+          print(f"Invalid zone_limits for machine {machine['id']}: {exc}")
+    machine["zone_limits"] = {}
     return machines
 
 def get_machine(machine_id: int):

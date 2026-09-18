@@ -1,6 +1,6 @@
 import numpy as np
 
-def calculate_iou(box_a, box_b):
+def calculate_iou(box_a, box_b): # Measure overlap between two bounding box
     ax1, ay1, ax2, ay2 = box_a
     bx1, by1, bx2, by2 = box_b
 
@@ -17,7 +17,7 @@ def calculate_iou(box_a, box_b):
 
     return inter / union if union > 0 else 0.0
 
-def boxes_are_duplicate(a, b, iou_threshold, center_ratio):
+def boxes_are_duplicate(a, b, iou_threshold, center_ratio): #Checks whether two detected people are likely duplicates
     box_a = (a["x1"],a["y1"],a["x2"],a["y2"],)
 
     box_b = (b["x1"],b["y1"],b["x2"],b["y2"],)
@@ -40,7 +40,7 @@ def boxes_are_duplicate(a, b, iou_threshold, center_ratio):
 
     return iou >= 0.40 and distance <= ((da + db) / 2) * center_ratio
 
-def deduplicate_persons(persons,iou_threshold,center_ratio):
+def deduplicate_persons(persons,iou_threshold,center_ratio): # Removes duplicate person detections
     if len(persons) <= 1:
         return persons, set()
     ordered = sorted(persons,
@@ -62,7 +62,7 @@ def deduplicate_persons(persons,iou_threshold,center_ratio):
             kept.append(person)
     return kept, suppressed
 
-def find_previous_track(track_states,person,current_time,active_ids,max_seconds,center_ratio,iou_threshold):
+def find_previous_track(track_states,person,current_time,active_ids,max_seconds,center_ratio,iou_threshold): # Attempts to connect a new tracker ID to an older tracker ID
     best_id = None
     best_score = -1.0
 
@@ -108,15 +108,7 @@ def find_previous_track(track_states,person,current_time,active_ids,max_seconds,
 
     return best_id
 
-def match_locked_person(
-    locked_box,
-    detections,
-    used_ids=None,
-    center_ratio=1.0,
-    iou_threshold=0.10,
-    preferred_track_id=None,
-):
-
+def match_locked_person(locked_box,detections,used_ids=None,center_ratio=1.0,iou_threshold=0.10,preferred_track_id=None,): # Macthes a current detection to a previously locked physical person
     if used_ids is None:
         used_ids = set()
 

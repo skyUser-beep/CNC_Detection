@@ -71,17 +71,29 @@ class MonitoringManager:
         return session
 
     def stop(self, machine_id: int):
-        result = self._request("POST", f"/detection/{self._camera_id(machine_id)}/stop")
+        try:
+          result = self._request("POST", f"/detection/{self._camera_id(machine_id)}/stop")
+        except RuntimeError as exc:
+            with self._lock:
+                session=self._sessions.get(machine_id)
+                if session:
+                    session.last_error=str(exc)
+            raise
         with self._lock:
             session = self._sessions.get(machine_id)
             if session:
                 session.running = bool(result.get("running"))
+                session.last_error= result.get("last_error")
             return session
 
     def delete_machine(self, machine_id: int):
         return self._request("DELETE", f"/detection/{self._camera_id(machine_id)}")
 
     def status(self, machine_id: int):
+        with self._lock:
+            session = self._sessions.get(machine_id)
+            started_at = session.started_at if session else None
+
         try:
             result = self._request(
                 "GET", f"/detection/{self._camera_id(machine_id)}/status"
@@ -89,22 +101,35 @@ class MonitoringManager:
         except RuntimeError as exc:
             with self._lock:
                 session = self._sessions.get(machine_id)
+                if session:
+                    session.last_error = str(exc)
             return {
                 "running": False,
                 "people_inside": 0,
+                "zones": [],
                 "last_error": str(exc),
-                "started_at": session.started_at if session else None,
+                "started_at": started_at,
             }
+
+        zones = result.get("zones", [])
+        people_inside = sum(
+            int(zone.get("present", 0))
+            for zone in zones
+        )
+
+        with self._lock:
+            session = self._sessions.get(machine_id)
+            if session:
+                session.running = bool(result.get("running"))
+                session.people_inside = people_inside
+                session.last_error = result.get("last_error")
+
         return {
             "running": bool(result.get("running")),
-            "people_inside": sum(
-                int(zone.get("present", 0)) for zone in result.get("zones", [])
-            ),
-            "zones": result.get("zones", []),
+            "people_inside": people_inside,
+            "zones": zones,
             "last_error": result.get("last_error"),
-            "started_at": self._sessions.get(machine_id).started_at
-            if machine_id in self._sessions
-            else None,
+            "started_at": started_at,
         }
 
     def events(self):

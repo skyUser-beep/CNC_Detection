@@ -1,17 +1,20 @@
-import copy
-import asyncio
-import shutil
-import threading
-import time
-from types import SimpleNamespace
-from types import ModuleType
+import copy # copies conf. values
+import asyncio # Handles async streaming
+import shutil # Delete camera directories
+import threading # Protects shared worker state
+import time 
+from types import SimpleNamespace # Creates a conf. object dynamically
+from types import ModuleType # helps executes modules while copying conf
 
-import cv2
-import torch
+import cv2 # encodes video frames as jpeg images
+import torch # checks for GPU
+
+# web server,API error responses, streaming response, static file hosting, and request validation
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
 
 import config
 from camera.worker import CameraWorker
@@ -24,9 +27,9 @@ workers: dict[str, CameraWorker] = {}
 workers_lock = threading.Lock()
 events = EventManager(config.outputs_dir)
 zones = ZoneManager(config.outputs_dir, config.zone_margin_px)
-app.mount("/outputs", StaticFiles(directory=config.outputs_dir), name="outputs")
+app.mount("/outputs", StaticFiles(directory=config.outputs_dir), name="outputs")  # Security consideration only for trusted local network
 
-class StartRequest(BaseModel):
+class StartRequest(BaseModel): # validate incoming JSON (Pydantic)
     camera_id: str = Field(min_length=1)
     source: str = Field(min_length=1)
     max_persons: int = Field(default=1, ge=1, le=50)
@@ -34,7 +37,7 @@ class StartRequest(BaseModel):
     multiple_limit_seconds: int = Field(default=120, ge=1)
     absence_limit_seconds: int = Field(default=300, ge=1)
 
-@app.on_event("shutdown")
+@app.on_event("shutdown") 
 def shutdown_workers():
     with workers_lock:
         active_workers = list(workers.values())
@@ -52,8 +55,7 @@ def make_worker(request: StartRequest):
     device, half = choose_device()
     phone_detector = PhoneDetector(
         config.phone_model_path,
-        device,
-        half,
+        device,half,
         config.phone_confidence,
         config.phone_image_size,
         config.phone_class_id,
@@ -182,8 +184,8 @@ async def detection_stream(camera_id: str, request: Request):
             success, encoded = cv2.imencode(".jpg", frame)
             if not success:
                 raise RuntimeError(f"Could not encode stream frame for {camera_id}")
-            yield (
-                b"--frame\r\n"
+            
+            yield (b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n"
                 + encoded.tobytes()
                 + b"\r\n"

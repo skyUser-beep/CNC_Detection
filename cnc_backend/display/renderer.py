@@ -1,12 +1,12 @@
-import cv2
-from events.event_manager import format_timestamp
-from zones.zone_manager import ZoneManager
+import cv2  # used to draw and modity video frame 
+from events.event_manager import format_timestamp # function that converts seconds into a readable time format
+from zones.zone_manager import ZoneManager # Zone management class 
 
 class Renderer:
-    def __init__(self, display_width):
+    def __init__(self, display_width):  
         self.display_width = display_width
 
-    def render(self,frame,camera_id, video_time,zones,persons,inside,safety,processing_fps,is_live=False,):
+    def render(self,frame,camera_id, video_time,zones,persons,inside,safety,processing_fps,is_live=False,): # creating monitoring display
 
         if is_live:
             # Live CCTV: readable but not excessively large
@@ -53,32 +53,27 @@ class Renderer:
             person_key = person.get("person_key",person["id"])
             track_id = person["id"]
 
-            status = (
-                f"ZONE {zone + 1}"
+            status = (f"ZONE {zone + 1}"
                 if zone is not None
                 else "OUTSIDE"
             )
 
             if person.get("locked", False):
                 color = (0, 255, 0)
-
                 label = (f"PERSON {person_key} | ID {track_id} | {status}")
             else:
-                color = (
-                    (0, 255, 0)
+                color = ((0, 255, 0)
                     if zone is not None
                     else (0, 165, 255)
                 )
 
                 label = f"ID {track_id} | {status}"
-                
             # Bounding box
             cv2.rectangle(frame,
                 (x1, y1),(x2, y2),
                 color,
                 2,
             )
-
             # Person label
             cv2.putText(frame,label,
                 (x1, max(20, y1 - 8)),
@@ -96,19 +91,15 @@ class Renderer:
         panel_height = min( panel_height,frame.shape[0] - 20)
 
         overlay = frame.copy()
-        cv2.rectangle(
-            overlay,
+        cv2.rectangle(overlay,
             (10, 10),
             (panel_width, panel_height),
             (0, 0, 0),
             -1,
         )
-        frame = cv2.addWeighted(
-            overlay,
-            0.60,
-            frame,
-            0.40,
-            0,
+        frame = cv2.addWeighted(overlay,
+            0.60,frame,
+            0.40,0,
         )
         lines = [
             f"{camera_id} | Video: "
@@ -189,3 +180,4 @@ class Renderer:
                 interpolation=cv2.INTER_AREA,
             )
         return frame
+    #Its job is to take video frame, detect people, work zones, and safety information, then draw everythin on the frame so we can see monitoring results in a OpenCV window

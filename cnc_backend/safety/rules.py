@@ -286,7 +286,6 @@ class SafetyRules:
                 f"| Track ID: {track_id}"
             )
 
-
         for z in range(zone_count):
             count = len(inside[z])
             cooldown = self.cooldown_until[z]

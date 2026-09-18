@@ -46,10 +46,7 @@ class EventManager:
             )
         return timestamp
 
-    def screenshot(
-        self, camera_id, frame, video_time, event_type, track_ids, zone=None,
-        timestamp=None,
-    ):
+    def screenshot(self, camera_id, frame, video_time, event_type, track_ids, zone=None,timestamp=None,):
         # Use the same directory structure as camera_dir()
         camera_dir = self.camera_dir(camera_id)
 
@@ -138,9 +135,9 @@ class EventManager:
                 writer.writerows(kept)
             timestamp = removed.get("timestamp", "").replace(":", "-")
             event_type = removed.get("event", "")
-            for screenshot in (camera_dir / "screenshots").glob(
-                f"{timestamp}_{event_type}_*.jpg"
-            ):
+            for screenshot in (camera_dir / "screenshots").glob(f"{timestamp}_{event_type}_*.jpg"):
                 screenshot.unlink()
             return True
         return False
+
+    # Event logging, Screenshot capture, camera organization, event retrieval, event deletion
