@@ -63,7 +63,6 @@ if not cameras:
         if value:
 
             source = resolve_camera_source(value)
-
             cameras[f"camera_{index:02d}"] = source
 
 person_model_path = str(model_path)
@@ -116,7 +115,6 @@ multiple_limit_seconds = 120
 duplicate_iou_threshold = 0.65
 
 duplicate_center_ratio = 0.25
-
 
 model_path = str(model_path)
 

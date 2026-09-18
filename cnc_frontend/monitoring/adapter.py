@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
 BACKEND_URL = os.getenv("CNC_BACKEND_URL", "http://127.0.0.1:9000").rstrip("/")
 
 @dataclass
