@@ -58,7 +58,10 @@ def start_machine(machine_id: int):
     machine = get_machine(machine_id)
     if not machine:
         raise HTTPException(404, "Machine not found")
-    manager.start(machine)
+    try:
+        manager.start(machine)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
     set_active(machine_id, True)
     return RedirectResponse(url="/", status_code=303)
 
