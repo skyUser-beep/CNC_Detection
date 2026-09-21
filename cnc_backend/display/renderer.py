@@ -140,14 +140,14 @@ class Renderer:
                 elapsed = video_time - safety.multiple_start[z]
                 
                 text = (
-                    f"Zone {z + 1}: {count} PEOPLE "
+                    f"Zone {z + 1}: {count}/{safety.allowed_people_per_zone[z]} PEOPLE "
                     f"{elapsed:.0f}/"
                     f"{safety.multiple_limit_seconds}s"
                 )
                 color = (0, 255, 255)
 
             else:
-                text = f"Zone {z + 1}: {count}"
+                text = f"Zone {z + 1}: {count}/{safety.allowed_people_per_zone[z]}"
                 color = (0, 255, 0)
 
             cv2.putText(frame,text,

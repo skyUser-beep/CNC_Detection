@@ -70,9 +70,8 @@ def make_worker(request: StartRequest):
     worker_config.multiple_limit_seconds = request.multiple_limit_seconds
     worker_config.multiple_person_limit_seconds = request.multiple_limit_seconds
     worker_config.absence_limit_seconds = request.absence_limit_seconds
-    worker_config.allowed_people_per_zone = request.zone_limits or {
-        "zone_1": request.max_persons,
-    }
+    worker_config.allowed_people_per_zone = request.zone_limits
+    worker_config.default_allowed_people = request.max_persons
 
     worker = CameraWorker(
         request.camera_id,

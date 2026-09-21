@@ -67,7 +67,7 @@ if not cameras:
 
 person_model_path = str(model_path)
 
-person_confidence = float(os.getenv("PERSON_CONFIDENCE", "0.30"))
+person_confidence = float(os.getenv("PERSON_CONFIDENCE", "0.40"))
 
 phone_confidence = float(os.getenv("PHONE_CONFIDENCE", "0.50"))
 

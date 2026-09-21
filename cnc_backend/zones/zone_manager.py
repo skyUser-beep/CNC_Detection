@@ -38,39 +38,29 @@ class ZoneManager:
         for zone in zones:
             mask = np.zeros((height, width), dtype=np.uint8)
             cv2.fillPoly(mask, [zone], 255)
-            if self.margin_px > 0:
-                size = self.margin_px * 2 + 1
-                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
-                mask = cv2.dilate(mask, kernel)
             result.append(mask)
         return result
 
     @staticmethod
     def point_inside(mask, x, y):
         h, w = mask.shape
-        x = max(0, min(w - 1, int(x)))
-        y = max(0, min(h - 1, int(y)))
+        x = int(x)
+        y = int(y)
+        if x < 0 or x >= w or y < 0 or y >= h:
+            return False
         return mask[y, x] > 0
 
     @classmethod
     def person_zone(cls, masks, x1, y1, x2, y2):
-        best_zone = None
-        best_score = 0
+        # The bottom-center point approximates where the person's feet touch
+        # the floor. A person's upper body can overlap a zone while they are
+        # standing outside it, so bounding-box overlap is not occupancy.
+        foot_x = (x1 + x2) / 2
+        foot_y = y2
         for index, mask in enumerate(masks):
-            height, width = mask.shape
-            left = max(0, min(width, int(x1)))
-            top = max(0, min(height, int(y1)))
-            right = max(0, min(width, int(x2)))
-            bottom = max(0, min(height, int(y2)))
-            if right <= left or bottom <= top:
-                continue
-            # A person is present when any part of their detected box is
-            # inside the (already margin-expanded) work-zone mask.
-            score = cv2.countNonZero(mask[top:bottom, left:right])
-            if score > best_score:
-                best_score = score
-                best_zone = index
-        return best_zone
+            if cls.point_inside(mask, foot_x, foot_y):
+                return index
+        return None
 
     @staticmethod
     def draw(frame, zones):

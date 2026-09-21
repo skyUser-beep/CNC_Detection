@@ -43,7 +43,7 @@
           {% if machine.runtime.zones %}
           <div class="zone-statuses">
             {% for zone in machine.runtime.zones %}
-            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present</span></div>
+            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present / {{ zone.allowed }} allowed</span></div>
             {% endfor %}
           </div>
           {% endif %}

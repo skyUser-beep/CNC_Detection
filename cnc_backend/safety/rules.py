@@ -9,9 +9,12 @@ class SafetyRules:
 
         self.multiple_limit_seconds = config.multiple_person_limit_seconds
         configured_limits = getattr(config, "allowed_people_per_zone", 1)
+        default_limit = max(1, int(getattr(config, "default_allowed_people", 1)))
         if isinstance(configured_limits, dict):
             self.allowed_people_per_zone = [
-                max(1, int(configured_limits.get(f"zone_{index + 1}", 1)))
+                max(1, int(configured_limits.get(
+                    f"zone_{index + 1}", default_limit
+                )))
                 for index in range(zones_count)
             ]
         else:
