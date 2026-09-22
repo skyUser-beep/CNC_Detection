@@ -61,7 +61,6 @@ if not cameras:
         value = os.getenv(key, "").strip()
 
         if value:
-
             source = resolve_camera_source(value)
             cameras[f"camera_{index:02d}"] = source
 

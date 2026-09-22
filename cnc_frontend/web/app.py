@@ -5,11 +5,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from database.db import (
-    init_db, list_machines, get_machine, create_machine, set_active,
+from database.db import (init_db, list_machines, get_machine, create_machine, set_active,
     update_machine_settings, recent_events, add_event,
     delete_machine as delete_machine_record,
 )
+
 from monitoring.adapter import MonitoringManager
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,8 +39,7 @@ def dashboard(request: Request):
     })
 
 @app.post("/machines")
-def add_machine(
-    name: str = Form(...),
+def add_machine(name: str = Form(...),
     rtsp_url: str = Form(...),
     max_persons: int = Form(...),
     multiple_limit_seconds: int = Form(120),
@@ -66,8 +65,7 @@ def start_machine(machine_id: int):
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/machines/{machine_id}/settings")
-async def update_settings(
-    request: Request,
+async def update_settings( request: Request,
     machine_id: int,
     max_persons: int = Form(...),
     multiple_limit_seconds: int = Form(...),
@@ -91,13 +89,13 @@ async def update_settings(
                 raise HTTPException(400, f"Invalid limit for zone {zone_number}") from exc
     if not zone_limits:
         zone_limits = {"zone_1": max_persons}
-    update_machine_settings(
-        machine_id,
+    update_machine_settings(machine_id,
         max_persons,
         multiple_limit_seconds,
         absence_limit_seconds,
         zone_limits,
     )
+    
     if manager.status(machine_id)["running"]:
         manager.stop(machine_id)
         manager.start(get_machine(machine_id))

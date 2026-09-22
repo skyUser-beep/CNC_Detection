@@ -60,8 +60,7 @@ class MonitoringManager:
                 "absence_limit_seconds": machine["absence_limit_seconds"],
             },
         )
-        session = Session(
-            machine_id=machine_id,
+        session = Session(machine_id=machine_id,
             running=bool(result.get("running")),
             started_at=time.time(),
         )
@@ -94,16 +93,14 @@ class MonitoringManager:
             started_at = session.started_at if session else None
 
         try:
-            result = self._request(
-                "GET", f"/detection/{self._camera_id(machine_id)}/status"
-            )
+            result = self._request("GET", f"/detection/{self._camera_id(machine_id)}/status")
+
         except RuntimeError as exc:
             with self._lock:
                 session = self._sessions.get(machine_id)
                 if session:
                     session.last_error = str(exc)
-            return {
-                "running": False,
+            return {"running": False,
                 "people_inside": 0,
                 "zones": [],
                 "last_error": str(exc),
