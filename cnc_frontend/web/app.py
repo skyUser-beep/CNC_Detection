@@ -1,6 +1,9 @@
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request as UrlRequest, urlopen
+
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,6 +20,18 @@ app = FastAPI(title="CNC Monitoring Dashboard")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 manager = MonitoringManager()
+
+def backend_stream(path: str):
+    request = UrlRequest(f"{manager.backend_url}{path}")
+    try:
+        response = urlopen(request, timeout=10)
+    except (HTTPError, URLError) as exc:
+        raise HTTPException(502, f"CNC backend stream unavailable: {exc}") from exc
+    try:
+        while chunk := response.read(64 * 1024):
+            yield chunk
+    finally:
+        response.close()
 
 @app.on_event("startup")
 def startup():
@@ -126,6 +141,20 @@ def machine_status(machine_id: int):
     if not get_machine(machine_id):
         raise HTTPException(404, "Machine not found")
     return manager.status(machine_id)
+
+@app.get("/backend/detection/{camera_id}/stream")
+def machine_stream(camera_id: str):
+    return StreamingResponse(
+        backend_stream(f"/detection/{camera_id}/stream"),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+@app.get("/backend/outputs/{file_path:path}")
+def output_file(file_path: str):
+    return StreamingResponse(
+        backend_stream(f"/outputs/{file_path}"),
+        media_type="image/jpeg",
+    )
 
 @app.get("/api/events")
 def events():

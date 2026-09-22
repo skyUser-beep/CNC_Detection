@@ -21,6 +21,10 @@ class MonitoringManager:
         self._lock = threading.Lock()
         self._sessions: dict[int, Session] = {}
 
+    @property
+    def backend_url(self):
+        return BACKEND_URL
+
     def _request(self, method: str, path: str, payload: dict | None = None):
         body = json.dumps(payload).encode() if payload is not None else None
         request = Request(

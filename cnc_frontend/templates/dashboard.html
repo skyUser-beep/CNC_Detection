@@ -34,7 +34,7 @@
         <article class="machine-card">
           <div class="card-top"><h3>{{ machine.name }}</h3><span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span></div>
           {% if machine.runtime.running %}
-          <img class="live-video" src="http://127.0.0.1:9000/detection/camera_{{ '%02d'|format(machine.id) }}/stream" alt="Live video for {{ machine.name }}">
+          <img class="live-video" src="/backend/detection/camera_{{ '%02d'|format(machine.id) }}/stream" alt="Live video for {{ machine.name }}">
           {% else %}
           <div class="video-placeholder">Start monitoring to view live video.</div>
           {% endif %}
@@ -75,7 +75,7 @@
     <section class="panel">
       <div class="card-top"><h2>Recent events</h2><a href="/api/events">JSON</a></div>
       <div class="table-wrap"><table><thead><tr><th>CCTV time</th><th>Machine</th><th>Event</th><th>Details</th><th>Screenshot</th><th>Delete</th></tr></thead><tbody>
-      {% for event in events %}<tr><td>{{ event.timestamp }}</td><td>{{ event.camera_id }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}{% if event.track_ids %}<br><small>Track IDs: {{ event.track_ids }}</small>{% endif %}</td><td>{% if event.screenshot_url %}<a href="http://127.0.0.1:9000{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td><td><form method="post" action="/api/events/{{ event.event_id }}/delete" onsubmit="return confirm('Delete this event and screenshot?')"><button class="delete-button" title="Delete event and screenshot" aria-label="Delete event and screenshot">&#128465;</button></form></td></tr>{% else %}<tr><td colspan="6">No events yet.</td></tr>{% endfor %}
+      {% for event in events %}<tr><td>{{ event.timestamp }}</td><td>{{ event.camera_id }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}{% if event.track_ids %}<br><small>Track IDs: {{ event.track_ids }}</small>{% endif %}</td><td>{% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td><td><form method="post" action="/api/events/{{ event.event_id }}/delete" onsubmit="return confirm('Delete this event and screenshot?')"><button class="delete-button" title="Delete event and screenshot" aria-label="Delete event and screenshot">&#128465;</button></form></td></tr>{% else %}<tr><td colspan="6">No events yet.</td></tr>{% endfor %}
       </tbody></table></div>
     </section>
   </main>
