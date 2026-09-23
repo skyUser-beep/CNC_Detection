@@ -60,11 +60,14 @@ def dashboard(request: Request):
         events = manager.events()
     except RuntimeError as exc:
         raise HTTPException(502, f"CNC backend events unavailable: {exc}") from exc
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "machines": machines,
-        "events": events,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "machines": machines,
+            "events": events,
+        },
+    )
 
 @app.post("/machines")
 def add_machine(name: str = Form(...),
