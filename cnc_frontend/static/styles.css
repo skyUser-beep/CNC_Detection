@@ -55,6 +55,10 @@ th, td { text-align: left; padding: 12px; border-bottom: 1px solid #263449; font
 .zone-limits { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
 .settings-form label { font-size: 12px; }
 .settings-form button { grid-column: 1 / -1; justify-self: start; }
+.credentials-dialog { width: min(100% - 32px, 420px); border: 1px solid #334155; border-radius: 12px; padding: 24px; color: #e8edf5; background: #111c30; }
+.credentials-dialog::backdrop { background: rgba(2, 6, 23, .72); }
+.credentials-dialog form { display: grid; gap: 16px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 600px) {
   .container { width: min(100% - 20px, 1320px); padding-top: 16px; }

@@ -42,6 +42,14 @@ def init_db():
             FOREIGN KEY(machine_id) REFERENCES machines(id)
         )
         """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS camera_credentials (
+            host TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
 
 def list_machines():
     with connection() as conn:
@@ -101,6 +109,26 @@ def update_machine_settings(
                 json.dumps(zone_limits),
                 machine_id,
             ),
+        )
+
+def get_camera_credentials(host):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT username, password FROM camera_credentials WHERE host = ?",
+            (host,),
+        ).fetchone()
+    return dict(row) if row else None
+
+def save_camera_credentials(host, username, password):
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO camera_credentials (host, username, password)
+               VALUES (?, ?, ?)
+               ON CONFLICT(host) DO UPDATE SET
+               username = excluded.username,
+               password = excluded.password,
+               updated_at = CURRENT_TIMESTAMP""",
+            (host, username, password),
         )
 
 def add_event(machine_id, event_type, details):

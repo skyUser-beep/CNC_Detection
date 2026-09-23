@@ -60,7 +60,7 @@
           </form>
           {% if machine.runtime.last_error %}<p class="error">{{ machine.runtime.last_error }}</p>{% endif %}
           <div class="actions">
-            <form method="post" action="/machines/{{ machine.id }}/start"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/start" data-start-form data-rtsp-url="{{ machine.rtsp_url }}"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
             <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %}>Stop</button></form>
             <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Delete this machine and its saved events?')"><button class="delete-button" title="Delete machine" aria-label="Delete machine">&#128465; Delete</button></form>
             <a class="button secondary" href="/api/machines/{{ machine.id }}/status">Status JSON</a>
@@ -79,5 +79,62 @@
       </tbody></table></div>
     </section>
   </main>
+  <dialog id="camera-credentials-dialog" class="credentials-dialog">
+    <form method="dialog" id="camera-credentials-form">
+      <h2>Camera credentials required</h2>
+      <p class="hint">This camera rejected the connection without credentials. They will be saved for this camera host and reused automatically.</p>
+      <label>Username<input name="username" autocomplete="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="error" id="credentials-error" hidden></p>
+      <div class="dialog-actions"><button type="button" data-dialog-cancel>Cancel</button><button type="submit">Save and connect</button></div>
+    </form>
+  </dialog>
+  <script>
+    (() => {
+      const dialog = document.getElementById("camera-credentials-dialog");
+      const form = document.getElementById("camera-credentials-form");
+      const error = document.getElementById("credentials-error");
+      let pendingStartForm;
+
+      async function start(formToSubmit) {
+        const response = await fetch(formToSubmit.action, { method: "POST", redirect: "manual" });
+        if (response.status === 303 || response.ok || response.type === "opaqueredirect") {
+          window.location.reload();
+          return true;
+        }
+        return false;
+      }
+
+      document.querySelectorAll("[data-start-form]").forEach((startForm) => {
+        startForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (await start(startForm)) return;
+          pendingStartForm = startForm;
+          error.hidden = true;
+          dialog.showModal();
+        });
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        data.append("rtsp_url", pendingStartForm.dataset.rtspUrl);
+        const saveResponse = await fetch("/api/camera-credentials", { method: "POST", body: data });
+        if (!saveResponse.ok) {
+          error.textContent = "Could not save credentials. Please check the values and try again.";
+          error.hidden = false;
+          return;
+        }
+        dialog.close();
+        if (!(await start(pendingStartForm))) {
+          error.textContent = "The camera still could not be opened. Check the credentials and try again.";
+          error.hidden = false;
+          dialog.showModal();
+        }
+      });
+
+      document.querySelector("[data-dialog-cancel]").addEventListener("click", () => dialog.close());
+    })();
+  </script>
 </body>
 </html>

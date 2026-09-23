@@ -1,5 +1,6 @@
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import FastAPI, Request, Form, HTTPException
@@ -21,8 +22,20 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 manager = MonitoringManager()
 
+def camera_host(rtsp_url: str):
+    from urllib.parse import urlsplit
+    parsed = urlsplit(rtsp_url.strip())
+    if parsed.scheme not in ("rtsp", "rtsps") or not parsed.hostname:
+        raise HTTPException(400, "Camera URL must contain a valid RTSP host")
+    host = parsed.hostname.lower()
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return host
+
 def backend_stream(path: str):
-    request = UrlRequest(f"{manager.backend_url}{path}")
+    request = UrlRequest(f"{manager.backend_url}{quote(path, safe='/%')}")
     try:
         response = urlopen(request, timeout=10)
     except (HTTPError, URLError) as exc:
@@ -141,6 +154,16 @@ def machine_status(machine_id: int):
     if not get_machine(machine_id):
         raise HTTPException(404, "Machine not found")
     return manager.status(machine_id)
+
+@app.post("/api/camera-credentials")
+def save_credentials(rtsp_url: str = Form(...), username: str = Form(...), password: str = Form(...)):
+    from database.db import save_camera_credentials
+    host = camera_host(rtsp_url)
+    username = username.strip()
+    if not username or not password:
+        raise HTTPException(400, "Camera username and password are required")
+    save_camera_credentials(host, username, password)
+    return {"saved": True}
 
 @app.get("/backend/detection/{camera_id}/stream")
 def machine_stream(camera_id: str):

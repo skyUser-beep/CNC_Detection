@@ -4,7 +4,10 @@ import threading
 import time
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
+
+from database.db import get_camera_credentials
 
 BACKEND_URL = os.getenv("CNC_BACKEND_URL", "http://127.0.0.1:9000").rstrip("/")
 
@@ -49,6 +52,32 @@ class MonitoringManager:
     def _camera_id(machine_id: int) -> str:
         return f"camera_{machine_id:02d}"
 
+    @staticmethod
+    def _credential_host(parsed):
+        if not parsed.hostname:
+            return None
+        host = parsed.hostname.lower()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        return host
+
+    @staticmethod
+    def _source_with_credentials(source: str):
+        parsed = urlsplit(source)
+        if parsed.scheme not in ("rtsp", "rtsps"):
+            return source
+        host = MonitoringManager._credential_host(parsed)
+        if not host:
+            return source
+        credentials = get_camera_credentials(host)
+        if not credentials:
+            return source
+        user = quote(credentials["username"], safe="")
+        password = quote(credentials["password"], safe="")
+        return urlunsplit(parsed._replace(netloc=f"{user}:{password}@{host}"))
+
     def start(self, machine: dict):
         machine_id = int(machine["id"])
         camera_id = self._camera_id(machine_id)
@@ -57,7 +86,7 @@ class MonitoringManager:
             "/detection/start",
             {
                 "camera_id": camera_id,
-                "source": machine["rtsp_url"],
+                "source": self._source_with_credentials(machine["rtsp_url"]),
                 "max_persons": machine["max_persons"],
                 "zone_limits": machine.get("zone_limits", {}),
                 "multiple_limit_seconds": machine["multiple_limit_seconds"],
