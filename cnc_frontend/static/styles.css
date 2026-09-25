@@ -46,6 +46,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .machine-event small { color: #94a3b8; white-space: nowrap; }
 .machine-event p { color: #cbd5e1; overflow-wrap: anywhere; }
 .machine-event a { color: #93c5fd; }
+.bulk-delete-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.bulk-delete-form label, .event-select, .event-select-all { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+.bulk-delete-form input, .event-select input { width: auto; }
+.event-select-all { margin-top: 8px; color: #94a3b8; font-size: 12px; }
+.icon-button { padding: 8px 10px; font-size: 16px; }
 .preview-video { display: block; width: 100%; max-height: 720px; object-fit: contain; background: #020617; border-radius: 8px; margin: 14px 0; }
 .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-width: 0; }
 .live-video, .video-placeholder { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 360px; object-fit: contain; background: #020617; border-radius: 8px; margin: 14px 0; }
@@ -117,6 +122,12 @@ th, td { text-align: left; padding: 12px; border-bottom: 1px solid #263449; font
 .row-actions form { margin: 0; }
 .row-actions button { padding: 8px 11px; }
 .error-row td { border-bottom: 1px solid #263449; padding-top: 0; }
+.machine-events-row td { padding-top: 4px; color: #cbd5e1; }
+.machine-events { display: grid; gap: 6px; margin-top: 8px; }
+.machine-event { padding: 8px 10px; border-radius: 8px; background: #172338; font-size: 12px; }
+.machine-event small { margin-left: 8px; color: #94a3b8; }
+.machine-event p { margin: 4px 0; overflow-wrap: anywhere; }
+.machine-event a { color: #93c5fd; }
 .zone-drawing-fieldset {
   grid-column: 1 / -1; border: 1px solid #334155; border-radius: 10px;
   padding: 14px; display: grid; gap: 12px;

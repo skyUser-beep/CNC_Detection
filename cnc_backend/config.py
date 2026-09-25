@@ -3,7 +3,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 project_root = Path(__file__).resolve().parent
-load_dotenv(project_root / ".env")
+load_dotenv(project_root.parent / ".env")
+load_dotenv(project_root / ".env", override=True)
 
 data_dir = project_root / "data"
 videos_dir = data_dir / "videos"

@@ -40,6 +40,9 @@ class StartRequest(BaseModel): # validate incoming JSON (Pydantic)
     multiple_limit_seconds: int = Field(default=120, ge=1)
     absence_limit_seconds: int = Field(default=300, ge=1)
 
+class EventDeleteRequest(BaseModel):
+    event_ids: list[str] = Field(min_length=1)
+
 @app.on_event("shutdown") 
 def shutdown_workers():
     with workers_lock:
@@ -123,6 +126,14 @@ def list_events():
             else None
         )
     return records
+
+@app.post("/events/delete")
+def delete_events(request: EventDeleteRequest):
+    deleted = 0
+    for event_id in request.event_ids:
+        if events.delete_event(event_id):
+            deleted += 1
+    return {"deleted": deleted}
 
 @app.delete("/events/{event_id}")
 def delete_event(event_id: str):

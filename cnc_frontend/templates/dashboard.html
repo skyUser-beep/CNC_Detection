@@ -28,20 +28,44 @@
           <td><a class="preview-link" href="/machines/{{ machine.id }}/monitor" title="See preview">&rarr;</a></td>
           <td>
             <div class="machine-name">{{ machine.name }}</div>
-            <span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span>
+            <span class="status {{ 'running' if machine.runtime.running else 'stopped' }}" data-running-status>{{ 'Running' if machine.runtime.running else 'Stopped' }}</span>
           </td>
           <td><span data-zone-count>{{ zone_count }}</span></td>
           <td><span data-people-count>{{ machine.runtime.people_inside }}</span>/<span data-allowed-total>{{ allowed_total }}</span></td>
           <td><span class="violation-pill {{ 'active' if has_violation else '' }}" data-violation>{{ 'ACTIVE' if has_violation else 'OK' }}</span></td>
           <td class="row-actions">
-            <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form data-preview-url="/machines/{{ machine.id }}/preview" data-zone-count="{{ zone_count }}" data-zones-saved="{{ 'true' if machine.zones_saved else 'false' }}"><button {% if machine.runtime.running %}disabled{% endif %} title="Start">&#9654;</button></form>
-            <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %} title="Stop">&#9632;</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form data-rtsp-url="{{ machine.rtsp_url }}" data-preview-url="/machines/{{ machine.id }}/preview" data-zone-count="{{ zone_count }}" data-zones-saved="{{ 'true' if machine.zones_saved else 'false' }}"><button {% if machine.runtime.running %}disabled{% endif %} title="Start">&#9654;</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/stop" data-stop-form><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %} title="Stop">&#9632;</button></form>
             <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Delete this machine and its saved events?')"><button class="delete-button" title="Delete machine" aria-label="Delete machine">&#128465;</button></form>
           </td>
         </tr>
         {% if machine.runtime.last_error %}
         <tr class="error-row"><td></td><td colspan="5" class="error">{{ machine.runtime.last_error }}</td></tr>
         {% endif %}
+        <tr class="machine-events-row">
+          <td></td>
+          <td colspan="5">
+            <strong>Events and violation periods</strong>
+            {% if machine.events %}
+            <div class="machine-events">
+              {% for event in machine.events %}
+              <div class="machine-event">
+                <label class="event-select"><input type="checkbox" name="event_ids" value="{{ event.event_id }}" form="delete-machine-events-{{ machine.id }}" data-event-checkbox="machine-events-{{ machine.id }}"> <strong>{{ event.event_type }}</strong></label>
+                <small>{{ event.timestamp }}</small>
+                <p>{{ event.details }}</p>
+                {% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank" rel="noopener">Open screenshot</a>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}<span class="muted"> No events recorded.</span>{% endif %}
+            {% if machine.events %}
+            <label class="event-select-all"><input type="checkbox" data-select-all="machine-events-{{ machine.id }}"> Select all</label>
+            <form id="delete-machine-events-{{ machine.id }}" class="bulk-delete-form" method="post" action="/api/events/delete" onsubmit="return confirm('Delete the selected events and screenshots?')">
+              <button class="delete-button icon-button" type="submit" title="Delete selected events" aria-label="Delete selected events">&#128465;</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
         </tbody>
       </table>
@@ -51,8 +75,14 @@
 
     <section class="panel">
       <div class="card-top"><h2>Recent events</h2><a href="/api/events">JSON</a></div>
-      <div class="table-wrap"><table><thead><tr><th>CCTV time</th><th>Machine</th><th>Event</th><th>Details</th><th>Screenshot</th><th>Delete</th></tr></thead><tbody>
-      {% for event in events %}<tr><td>{{ event.timestamp }}</td><td>{{ event.camera_id }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}{% if event.track_ids %}<br><small>Track IDs: {{ event.track_ids }}</small>{% endif %}</td><td>{% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td><td><form method="post" action="/api/events/{{ event.event_id }}/delete" onsubmit="return confirm('Delete this event and screenshot?')"><button class="delete-button" title="Delete event and screenshot" aria-label="Delete event and screenshot">&#128465;</button></form></td></tr>{% else %}<tr><td colspan="6">No events yet.</td></tr>{% endfor %}
+      {% if events %}
+      <form id="delete-all-events" class="bulk-delete-form" method="post" action="/api/events/delete" onsubmit="return confirm('Delete all selected events and screenshots?')">
+        <label><input type="checkbox" data-select-all="all-events"> Select all</label>
+        <button class="delete-button icon-button" type="submit" title="Delete selected events" aria-label="Delete selected events">&#128465;</button>
+      </form>
+      {% endif %}
+      <div class="table-wrap"><table><thead><tr><th>Select</th><th>CCTV time</th><th>Machine</th><th>Event</th><th>Details</th><th>Screenshot</th></tr></thead><tbody>
+      {% for event in events %}<tr><td><input type="checkbox" name="event_ids" value="{{ event.event_id }}" form="delete-all-events" data-event-checkbox="all-events"></td><td>{{ event.timestamp }}</td><td>{{ event.camera_id }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}{% if event.track_ids %}<br><small>Track IDs: {{ event.track_ids }}</small>{% endif %}</td><td>{% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td></tr>{% else %}<tr><td colspan="6">No events yet.</td></tr>{% endfor %}
       </tbody></table></div>
     </section>
   </main>
@@ -100,12 +130,36 @@
 
   <script>
     (() => {
+      document.querySelectorAll("[data-select-all]").forEach(selectAll => {
+        const group = selectAll.dataset.selectAll;
+        const checkboxes = () => [...document.querySelectorAll(`[data-event-checkbox="${group}"]`)];
+        selectAll.addEventListener("change", () => checkboxes().forEach(checkbox => {
+          checkbox.checked = selectAll.checked;
+        }));
+        checkboxes().forEach(checkbox => checkbox.addEventListener("change", () => {
+          selectAll.checked = checkboxes().length > 0 && checkboxes().every(item => item.checked);
+        }));
+      });
+      document.querySelectorAll(".bulk-delete-form").forEach(form => {
+        form.addEventListener("submit", event => {
+          if (!document.querySelector(`input[name="event_ids"][form="${form.id}"]:checked`)) {
+            event.preventDefault();
+            alert("Select at least one event to delete.");
+          }
+        });
+      });
       async function refresh(row) {
         const response = await fetch(`/api/machines/${row.dataset.machineId}/status`, {cache: "no-store"});
         if (!response.ok) return;
         const status = await response.json();
         row.querySelector("[data-people-count]").textContent = status.people_inside;
         row.querySelector("[data-zone-count]").textContent = status.zones.length || 1;
+        const statusLabel = row.querySelector("[data-running-status]");
+        statusLabel.textContent = status.running ? "Running" : "Stopped";
+        statusLabel.classList.toggle("running", status.running);
+        statusLabel.classList.toggle("stopped", !status.running);
+        row.querySelector("[data-start-form] button").disabled = status.running;
+        row.querySelector("[data-stop-form] button").disabled = !status.running;
         const violation = status.zones.some(zone => zone.violation && zone.violation.active);
         const pill = row.querySelector("[data-violation]");
         pill.textContent = violation ? "ACTIVE" : "OK";
@@ -367,6 +421,7 @@
         editorButton.addEventListener("click", async () => {
           const editorForm = document.createElement("form");
           editorForm.action = editorButton.dataset.action;
+          editorForm.dataset.rtspUrl = editorButton.dataset.rtspUrl;
           editorForm.dataset.previewUrl = editorButton.dataset.previewUrl;
           editorForm.dataset.zoneCount = editorButton.dataset.zoneCount;
           editorForm.dataset.zonesSaved = "false";

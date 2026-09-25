@@ -27,6 +27,20 @@ def boxes_are_duplicate(a, b, iou_threshold, center_ratio): #Checks whether two 
     if iou >= iou_threshold:
         return True
 
+    # A detector can return one tight box and one looser box for the same
+    # person. IoU alone misses this because the larger box increases the
+    # union area, so also detect strong containment.
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+    intersection = (
+        max(0, min(ax2, bx2) - max(ax1, bx1))
+        * max(0, min(ay2, by2) - max(ay1, by1))
+    )
+    area_a = max(1, ax2 - ax1) * max(1, ay2 - ay1)
+    area_b = max(1, bx2 - bx1) * max(1, by2 - by1)
+    if intersection / min(area_a, area_b) >= 0.75:
+        return True
+
     acx = (a["x1"] + a["x2"]) / 2
     acy = (a["y1"] + a["y2"]) / 2
 

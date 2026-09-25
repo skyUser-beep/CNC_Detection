@@ -58,15 +58,40 @@
 
     <section class="panel">
       <div class="card-top"><h2>Events and violation periods</h2><a href="/api/events">JSON</a></div>
-      <div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>Details</th><th>Screenshot</th></tr></thead><tbody>
+      <form id="delete-machine-events" class="bulk-delete-form" method="post" action="/api/events/delete" onsubmit="return confirm('Delete the selected events and screenshots?')">
+        <label><input type="checkbox" data-select-all="machine-events"> Select all</label>
+        <button class="delete-button icon-button" type="submit" title="Delete selected events" aria-label="Delete selected events">&#128465;</button>
+      </form>
+      <div class="table-wrap"><table><thead><tr><th>Select</th><th>Time</th><th>Event</th><th>Details</th><th>Screenshot</th></tr></thead><tbody>
       {% for event in events %}
       {% if event.camera_id == 'camera_' ~ '%02d'|format(machine.id) %}
-      <tr><td>{{ event.timestamp }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}</td><td>{% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td></tr>
+      <tr><td><input type="checkbox" name="event_ids" value="{{ event.event_id }}" form="delete-machine-events" data-event-checkbox="machine-events"></td><td>{{ event.timestamp }}</td><td>{{ event.event_type }}</td><td>{{ event.details }}</td><td>{% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank">Open image</a>{% else %}<span class="muted">Not saved</span>{% endif %}</td></tr>
       {% endif %}
-      {% else %}<tr><td colspan="4">No events yet.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="5">No events yet.</td></tr>{% endfor %}
       </tbody></table></div>
     </section>
   </main>
+  <script>
+    (() => {
+      const selectAll = document.querySelector("[data-select-all='machine-events']");
+      const checkboxes = [...document.querySelectorAll("[data-event-checkbox='machine-events']")];
+      if (selectAll) {
+        selectAll.addEventListener("change", () => checkboxes.forEach(checkbox => {
+          checkbox.checked = selectAll.checked;
+        }));
+        checkboxes.forEach(checkbox => checkbox.addEventListener("change", () => {
+          selectAll.checked = checkboxes.length > 0 && checkboxes.every(item => item.checked);
+        }));
+      }
+      const form = document.getElementById("delete-machine-events");
+      if (form) form.addEventListener("submit", event => {
+        if (!document.querySelector(`input[name="event_ids"][form="${form.id}"]:checked`)) {
+          event.preventDefault();
+          alert("Select at least one event to delete.");
+        }
+      });
+    })();
+  </script>
   <dialog id="zone-dialog" class="credentials-dialog zone-dialog">
     <h2>Update machine zones</h2>
     <p class="hint">Click Draw work-zone, then drag rectangles over the preview.</p>

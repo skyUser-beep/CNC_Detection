@@ -190,3 +190,6 @@ class MonitoringManager:
 
     def delete_event(self, event_id):
         return self._request("DELETE", f"/events/{event_id}")
+
+    def delete_events(self, event_ids):
+        return self._request("POST", "/events/delete", {"event_ids": event_ids})

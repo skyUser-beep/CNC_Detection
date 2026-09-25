@@ -286,6 +286,14 @@ def events():
     except RuntimeError as exc:
         raise HTTPException(502, f"CNC backend events unavailable: {exc}") from exc
 
+@app.post("/api/events/delete")
+def delete_events(event_ids: list[str] = Form(...)):
+    try:
+        manager.delete_events(event_ids)
+    except RuntimeError as exc:
+        raise HTTPException(502, f"CNC backend event deletion failed: {exc}") from exc
+    return RedirectResponse(url="/", status_code=303)
+
 @app.post("/api/events/{event_id}/delete")
 def delete_event(event_id: str):
     try:
