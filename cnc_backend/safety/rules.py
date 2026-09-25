@@ -236,7 +236,7 @@ class SafetyRules:
                                 datetime.now().astimezone(),
                             )
                             lock["away_logged"] = False
-                        else:
+                        elif current_time - lock["missing_start"] < self.inside_grace:
                             inside[z].add(lock["track_id"])
                             continue
 

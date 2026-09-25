@@ -218,6 +218,9 @@ for zone-specific occupancy rules.
 - Phone detection inside a person's work zone creates a `PHONE_DETECTED`
   event and screenshot.
 - Duplicate person detections are suppressed before counting.
+- A temporarily missing person remains counted only during the short
+  `INSIDE_GRACE_SECONDS` window (2.5 seconds by default); the identity lock is
+  retained separately for the five-minute absence confirmation.
 - Tracker-ID changes are matched back to the same physical person when
   spatially appropriate.
 - A stable tracker ID is preferred when matching a person who moves within a

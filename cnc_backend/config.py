@@ -104,9 +104,9 @@ absence_limit_seconds = 300
 
 zone_margin_px = 60
 
-track_grace_seconds = 1.5
+track_grace_seconds = float(os.getenv("TRACK_GRACE_SECONDS", "1.5"))
 
-inside_grace_seconds = 1.5
+inside_grace_seconds = float(os.getenv("INSIDE_GRACE_SECONDS", "2.5"))
 
 display_width = 900
 
