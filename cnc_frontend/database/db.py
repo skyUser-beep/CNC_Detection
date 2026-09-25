@@ -32,6 +32,15 @@ def init_db():
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(machines)")}
         if "zone_limits" not in columns:
             conn.execute("ALTER TABLE machines ADD COLUMN zone_limits TEXT NOT NULL DEFAULT '{}'")
+        legacy_machines = conn.execute(
+            """SELECT id, max_persons FROM machines
+               WHERE zone_limits IS NULL OR zone_limits = '' OR zone_limits = '{}'"""
+        ).fetchall()
+        for machine in legacy_machines:
+            conn.execute(
+                "UPDATE machines SET zone_limits = ? WHERE id = ?",
+                (json.dumps({"zone_1": machine["max_persons"]}), machine["id"]),
+            )
         conn.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,8 +67,8 @@ def list_machines():
         try:
             machine["zone_limits"] = json.loads(machine["zone_limits"] or "{}")
         except json.JSONDecodeError as exc:
-          print(f"Invalid zone_limits for machine {machine['id']}: {exc}")
-    machine["zone_limits"] = {}
+            print(f"Invalid zone_limits for machine {machine['id']}: {exc}")
+            machine["zone_limits"] = {}
     return machines
 
 def get_machine(machine_id: int):
@@ -73,13 +82,17 @@ def get_machine(machine_id: int):
             machine["zone_limits"] = {}
     return machine
 
-def create_machine(name, rtsp_url, max_persons, multiple_limit_seconds, absence_limit_seconds):
+def create_machine(
+    name, rtsp_url, max_persons, multiple_limit_seconds,
+    absence_limit_seconds, zone_limits=None,
+):
     with connection() as conn:
         cur = conn.execute(
             """INSERT INTO machines
-            (name, rtsp_url, max_persons, multiple_limit_seconds, absence_limit_seconds)
-            VALUES (?, ?, ?, ?, ?)""",
-            (name, rtsp_url, max_persons, multiple_limit_seconds, absence_limit_seconds),
+            (name, rtsp_url, max_persons, multiple_limit_seconds, absence_limit_seconds, zone_limits)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, rtsp_url, max_persons, multiple_limit_seconds,
+             absence_limit_seconds, json.dumps(zone_limits or {"zone_1": max_persons})),
         )
         return cur.lastrowid
 

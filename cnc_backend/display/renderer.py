@@ -107,7 +107,7 @@ class Renderer:
             f"Processing FPS: "
             f"{processing_fps:.1f}",
             f"People in zones: "
-            f"{sum(len(v) for v in inside.values())}",
+            f"{sum(safety.current_zone_counts)}",
             f"Work zones: {len(zones)}",
         ]
 
@@ -125,8 +125,9 @@ class Renderer:
             y += line_spacing
 
         for z in range(len(zones)):
-            inside_ids = inside.get(z, set())
-            count = len(inside_ids)
+            # Use the safety engine's authoritative deduplicated count. The
+            # display snapshot can be one frame behind during tracker changes.
+            count = safety.current_zone_counts[z]
 
             cooldown = safety.cooldown_until.get(z)
 

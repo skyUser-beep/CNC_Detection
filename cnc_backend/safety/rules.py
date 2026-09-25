@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from tracking.track_state import (deduplicate_persons,find_previous_track,match_locked_person,)
 
 class SafetyRules:
@@ -58,6 +60,10 @@ class SafetyRules:
         self.next_person_key = 1
         self.number_inside = 0
         self.current_zone_counts = [0 for _ in range(zones_count)]
+        self.violation_started_at = {i: None for i in range(zones_count)}
+        self.violation_ended_at = {i: None for i in range(zones_count)}
+        self.violation_open = {i: False for i in range(zones_count)}
+        self.violation_track_ids = {i: set() for i in range(zones_count)}
 
     def update(self,persons,current_time,zone_count,):
         events = []
@@ -68,6 +74,10 @@ class SafetyRules:
             self.multiple_start.setdefault(z, None)
             self.cooldown_until.setdefault(z, None)
             self.multiple_logged.setdefault(z, False)
+            self.violation_started_at.setdefault(z, None)
+            self.violation_ended_at.setdefault(z, None)
+            self.violation_open.setdefault(z, False)
+            self.violation_track_ids.setdefault(z, set())
             if z >= len(self.allowed_people_per_zone):
                 self.allowed_people_per_zone.append(1)
 
@@ -164,6 +174,7 @@ class SafetyRules:
                         # Allow a future departure to create
                         # a new event.
                         lock["away_logged"] = False
+                        lock["missing_start"] = None
                         inside[z].add(new_track_id)
                         continue
                     else:
@@ -180,7 +191,17 @@ class SafetyRules:
                         continue
                 else:
                     if lock["inside"]:
-                        continue
+                        if lock.get("missing_start") is None:
+                            lock["missing_start"] = current_time
+                        if current_time - lock["missing_start"] >= self.absence_limit:
+                            lock["inside"] = False
+                            # Keep the original disappearance time so the
+                            # configured absence period is not counted twice.
+                            lock["away_start"] = lock["missing_start"]
+                            lock["away_logged"] = False
+                        else:
+                            inside[z].add(lock["track_id"])
+                            continue
 
                     if lock["away_start"] is not None and not lock["away_logged"]:
 
@@ -228,26 +249,26 @@ class SafetyRules:
             if track_id in used_ids:
                 continue
 
-            returned_to_away_lock = None
+            matched_lock = None
 
             for lock in self.zone_locks[zone]:
-                if not lock["inside"] and lock["away_start"] is not None:
-                    # Use spatial matching one more time.
-                    matched = match_locked_person(
-                        lock["box"],[person],
-                        used_ids=set(),
-                        center_ratio=max(
-                            self.switch_center,
-                            2.0,
-                        ),
-                        iou_threshold=0.05,
-                    )
-                    if matched is not None:
-                        returned_to_away_lock = lock
-                        break
+                if lock["track_id"] in used_ids:
+                    continue
+                # Reuse a physical-person lock even when the tracker assigns a
+                # new ID after a missed/overlapping detection. Otherwise the
+                # old lock and the new lock are counted as two people.
+                matched = match_locked_person(
+                    lock["box"], [person],
+                    used_ids=set(),
+                    center_ratio=max(self.switch_center, 2.0),
+                    iou_threshold=0.05,
+                )
+                if matched is not None:
+                    matched_lock = lock
+                    break
 
-            if returned_to_away_lock is not None:
-                lock = returned_to_away_lock
+            if matched_lock is not None:
+                lock = matched_lock
                 old_track_id = lock["track_id"]
                 lock["track_id"] = track_id
                 lock["box"] = (
@@ -258,12 +279,15 @@ class SafetyRules:
                 lock["last_seen"] = current_time
                 lock["inside"] = True
                 lock["away_start"] = None
+                lock["missing_start"] = None
 
                 lock["away_logged"] = False
                 used_ids.add(track_id)
+                if old_track_id != track_id:
+                    inside[zone].discard(old_track_id)
                 inside[zone].add(track_id)
 
-                print(f"[{self.camera_id}] Zone {zone + 1}: Person returned | Person Key: "
+                print(f"[{self.camera_id}] Zone {zone + 1}: Person lock retained | Person Key: "
                     f"{lock['person_key']} | ID {old_track_id} -> {track_id}")
                 continue
             person_key = self.next_person_key
@@ -278,6 +302,7 @@ class SafetyRules:
                 "last_seen": current_time,
                 "away_start": None,
                 "away_logged": False,
+                "missing_start": None,
                 "inside": True,
             }
 
@@ -314,6 +339,9 @@ class SafetyRules:
                 elapsed = current_time- self.multiple_start[z]
                 if elapsed >= self.multiple_limit and not self.multiple_logged[z]:
                     self.multiple_logged[z] = True
+                    self.violation_started_at[z] = datetime.now().astimezone()
+                    self.violation_open[z] = True
+                    self.violation_track_ids[z] = set(inside[z])
 
                     event_type = "PEOPLE_OVER_ALLOWED_LIMIT"
                     details = (f"{count} people inside zone {z + 1} "
@@ -321,14 +349,24 @@ class SafetyRules:
                         f"for {elapsed:.1f} seconds; "
                         f"30 minutes cooldown started"
                     )
-                    self.cooldown_until[z] = (current_time+ self.cooldown_seconds)
-                    ids = set(inside[z])
-                    text = "|".join(
-                        str(i)
-                        for i in sorted(ids))
-                    timestamp = self.event_manager.log(self.camera_id,
-                        current_time,event_type,
-                        text,details,)
+            else:
+                if self.violation_open[z]:
+                    ended_at = datetime.now().astimezone()
+                    started_at = self.violation_started_at[z]
+                    ids = set(self.violation_track_ids[z])
+                    text = "|".join(str(i) for i in sorted(ids))
+                    interval = (
+                        f"{started_at.strftime('%I:%M:%S %p')} - "
+                        f"{ended_at.strftime('%I:%M:%S %p')}"
+                    )
+                    event_type = "PEOPLE_OVER_ALLOWED_LIMIT"
+                    details = (
+                        f"Zone {z + 1}: {interval}; occupancy remained over "
+                        f"the limit of {allowed}"
+                    )
+                    timestamp = self.event_manager.log(
+                        self.camera_id, current_time, event_type, text, details
+                    )
                     events.append({
                         "timestamp": timestamp,
                         "event_type": event_type,
@@ -336,10 +374,9 @@ class SafetyRules:
                         "details": details,
                         "zone": z,
                     })
-                    print(f"[{self.camera_id}] Zone {z + 1}: MULTIPLE PEOPLE EVENT | IDs: {text}")
-                    # Event already generated.
-                    self.multiple_start[z] = None
-            else:
+                    self.violation_ended_at[z] = ended_at
+                    self.violation_open[z] = False
+                self.cooldown_until[z] = None
                 self.multiple_start[z] = None
                 self.multiple_logged[z] = False
 
@@ -347,6 +384,14 @@ class SafetyRules:
             for v in inside.values())
         self.current_zone_counts = [len(inside[z]) for z in range(zone_count)]
         return persons, inside, events
+
+    def violation_status(self, zone):
+        started = self.violation_started_at.get(zone)
+        return {
+            "active": bool(self.violation_open.get(zone)),
+            "started_at": started.isoformat() if started else None,
+            "started_display": started.strftime("%I:%M:%S %p") if started else None,
+        }
 
     def get_display_persons(self, current_time):
         display_persons = []
@@ -402,6 +447,10 @@ class SafetyRules:
         self.multiple_logged = {i: False
             for i in range(zone_count)
         }
+        self.violation_started_at = {i: None for i in range(zone_count)}
+        self.violation_ended_at = {i: None for i in range(zone_count)}
+        self.violation_open = {i: False for i in range(zone_count)}
+        self.violation_track_ids = {i: set() for i in range(zone_count)}
         self.zone_locks = {i: []
             for i in range(zone_count)
         }

@@ -7,6 +7,7 @@ from types import SimpleNamespace # Creates a conf. object dynamically
 from types import ModuleType # helps executes modules while copying conf
 
 import cv2 # encodes video frames as jpeg images
+from fastapi.responses import Response
 import torch # checks for GPU
 
 # web server,API error responses, streaming response, static file hosting, and request validation
@@ -34,6 +35,8 @@ class StartRequest(BaseModel): # validate incoming JSON (Pydantic)
     source: str = Field(min_length=1)
     max_persons: int = Field(default=1, ge=1, le=50)
     zone_limits: dict[str, int] = Field(default_factory=dict)
+    zone_count: int = Field(default=1, ge=1, le=20)
+    zones: list[list[list[float]]] = Field(default_factory=list)
     multiple_limit_seconds: int = Field(default=120, ge=1)
     absence_limit_seconds: int = Field(default=300, ge=1)
 
@@ -52,6 +55,13 @@ def choose_device():
     return "cpu", False
 
 def make_worker(request: StartRequest):
+    if request.zones:
+        actual_zone_count = len(request.zones)
+        if not 1 <= actual_zone_count <= 20:
+            raise RuntimeError("Number of zones must be between 1 and 20")
+        request.zone_count = actual_zone_count
+    elif request.zone_count < 1:
+        raise RuntimeError("At least one work zone is required")
     device, half = choose_device()
     phone_detector = PhoneDetector(
         config.phone_model_path,
@@ -72,6 +82,15 @@ def make_worker(request: StartRequest):
     worker_config.absence_limit_seconds = request.absence_limit_seconds
     worker_config.allowed_people_per_zone = request.zone_limits
     worker_config.default_allowed_people = request.max_persons
+    # An empty zones payload means this is a restart/settings update. In that
+    # case CameraWorker loads the already-saved polygons and determines their
+    # count from the file.
+    worker_config.zone_count = request.zone_count if request.zones else None
+    if request.zones:
+        for zone in request.zones:
+            if len(zone) < 3 or any(len(point) != 2 for point in zone):
+                raise RuntimeError("Each zone must contain at least three points")
+        zones.save_normalized(request.camera_id, request.zones)
 
     worker = CameraWorker(
         request.camera_id,
@@ -123,6 +142,27 @@ def start_detection(request: StartRequest):
             raise HTTPException(500, f"Failed to start detection: {exc}") from exc
     return {"camera_id": request.camera_id, "running": True}
 
+@app.post("/detection/preview")
+def detection_preview(request: StartRequest):
+    from camera.reader import CameraReader
+    reader = CameraReader(request.camera_id, request.source)
+    try:
+        reader.start()
+        deadline = time.time() + 10
+        frame = None
+        while frame is None and time.time() < deadline:
+            frame, _, _ = reader.get_latest()
+            if frame is None:
+                time.sleep(0.05)
+        if frame is None:
+            raise HTTPException(504, "Camera did not produce a preview frame")
+        success, encoded = cv2.imencode(".jpg", frame)
+        if not success:
+            raise HTTPException(500, "Could not encode camera preview")
+        return Response(content=encoded.tobytes(), media_type="image/jpeg")
+    finally:
+        reader.stop()
+
 
 @app.post("/detection/{camera_id}/stop")
 def stop_detection(camera_id: str):
@@ -154,6 +194,7 @@ def detection_status(camera_id: str):
                 "zone": index + 1,
                 "present": int(safety.current_zone_counts[index]),
                 "allowed": safety.allowed_people_per_zone[index],
+                "violation": safety.violation_status(index),
             }
             for index in range(len(safety.current_zone_counts))
         ]
@@ -164,6 +205,14 @@ def detection_status(camera_id: str):
             "zones": zones,
             "last_error": str(worker.error) if worker.error else None,
         }
+
+@app.get("/detection/{camera_id}/zones")
+def detection_zones(camera_id: str):
+    path = zones.file_path(camera_id)
+    if not path.exists():
+        return {"saved": False, "count": 0}
+    loaded = zones.load(camera_id, 1, 1)
+    return {"saved": bool(loaded), "count": len(loaded or [])}
 
 @app.get("/detection/{camera_id}/stream")
 async def detection_stream(camera_id: str, request: Request):

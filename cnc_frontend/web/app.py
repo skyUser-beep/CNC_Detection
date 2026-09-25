@@ -55,11 +55,22 @@ def dashboard(request: Request):
     machines = []
     for machine in list_machines():
         machine["runtime"] = manager.status(machine["id"])
+        try:
+            machine["zones_saved"] = bool(manager.zones_status(machine["id"]).get("saved"))
+        except RuntimeError:
+            machine["zones_saved"] = False
         machines.append(machine)
     try:
         events = manager.events()
     except RuntimeError as exc:
         raise HTTPException(502, f"CNC backend events unavailable: {exc}") from exc
+    events_by_camera = {}
+    for event in events:
+        events_by_camera.setdefault(event["camera_id"], []).append(event)
+    for machine in machines:
+        machine["events"] = events_by_camera.get(
+            f"camera_{int(machine['id']):02d}", []
+        )
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -69,10 +80,31 @@ def dashboard(request: Request):
         },
     )
 
+@app.get("/machines/{machine_id}/monitor", response_class=HTMLResponse)
+def machine_preview_page(request: Request, machine_id: int):
+    machine = get_machine(machine_id)
+    if not machine:
+        raise HTTPException(404, "Machine not found")
+    machine["runtime"] = manager.status(machine_id)
+    try:
+        machine["zones_saved"] = bool(manager.zones_status(machine_id).get("saved"))
+    except RuntimeError:
+        machine["zones_saved"] = False
+    try:
+        events = manager.events()
+    except RuntimeError as exc:
+        raise HTTPException(502, f"CNC backend events unavailable: {exc}") from exc
+    return templates.TemplateResponse(
+        request=request,
+        name="machine_preview.html",
+        context={"machine": machine, "events": events},
+    )
+
 @app.post("/machines")
-def add_machine(name: str = Form(...),
+async def add_machine(request: Request, name: str = Form(...),
     rtsp_url: str = Form(...),
     max_persons: int = Form(...),
+    zone_count: int = Form(1),
     multiple_limit_seconds: int = Form(120),
     absence_limit_seconds: int = Form(300),
 ):
@@ -80,7 +112,21 @@ def add_machine(name: str = Form(...),
         raise HTTPException(400, "Camera URL must start with rtsp:// or rtsps://")
     if max_persons < 1 or max_persons > 50:
         raise HTTPException(400, "Maximum people must be between 1 and 50")
-    machine_id = create_machine(name.strip(), rtsp_url.strip(), max_persons, multiple_limit_seconds, absence_limit_seconds)
+    if not 1 <= zone_count <= 20:
+        raise HTTPException(400, "Number of zones must be between 1 and 20")
+    form = await request.form()
+    zone_limits = {}
+    for index in range(1, zone_count + 1):
+        try:
+            zone_limits[f"zone_{index}"] = max(1, min(50, int(
+                form.get(f"zone_limit_{index}", max_persons)
+            )))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"Invalid limit for zone {index}") from exc
+    machine_id = create_machine(
+        name.strip(), rtsp_url.strip(), max_persons, multiple_limit_seconds,
+        absence_limit_seconds, zone_limits,
+    )
     return RedirectResponse(url=f"/", status_code=303)
 
 @app.post("/machines/{machine_id}/start")
@@ -89,11 +135,62 @@ def start_machine(machine_id: int):
     if not machine:
         raise HTTPException(404, "Machine not found")
     try:
-        manager.start(machine)
+        raise HTTPException(400, "Use the dashboard zone editor before starting monitoring")
     except RuntimeError as exc:
         raise HTTPException(502, str(exc)) from exc
     set_active(machine_id, True)
     return RedirectResponse(url="/", status_code=303)
+
+@app.post("/machines/{machine_id}/start-monitoring")
+async def start_monitoring(machine_id: int, request: Request):
+    machine = get_machine(machine_id)
+    if not machine:
+        raise HTTPException(404, "Machine not found")
+    payload = await request.json()
+    zones = payload.get("zones")
+    if not isinstance(zones, list):
+        raise HTTPException(400, "Zones must be an array")
+    if not zones:
+        try:
+            manager.start(machine)
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        set_active(machine_id, True)
+        return {"started": True}
+    if not 1 <= len(zones) <= 20:
+        raise HTTPException(400, "Number of zones must be between 1 and 20")
+    zone_limits = machine.get("zone_limits", {})
+    zone_limits = {
+        f"zone_{index}": max(1, min(50, int(
+            zone_limits.get(f"zone_{index}", machine["max_persons"])
+        )))
+        for index in range(1, len(zones) + 1)
+    }
+    try:
+        update_machine_settings(
+            machine_id,
+            machine["max_persons"],
+            machine["multiple_limit_seconds"],
+            machine["absence_limit_seconds"],
+            zone_limits,
+        )
+        machine["zone_limits"] = zone_limits
+        manager.start_with_zones(machine, zones)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    set_active(machine_id, True)
+    return {"started": True}
+
+@app.get("/machines/{machine_id}/preview")
+def machine_preview(machine_id: int):
+    machine = get_machine(machine_id)
+    if not machine:
+        raise HTTPException(404, "Machine not found")
+    try:
+        preview = manager.preview(machine)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return StreamingResponse(iter([preview]), media_type="image/jpeg")
 
 @app.post("/machines/{machine_id}/settings")
 async def update_settings( request: Request,

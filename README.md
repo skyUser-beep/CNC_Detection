@@ -164,11 +164,16 @@ Do not run `python -m uvicorn api:app` from `cnc_backend` or
 ## Dashboard workflow
 
 1. Open the dashboard at `http://127.0.0.1:8000`.
-2. Add a machine name, RTSP URL, maximum people value, and delay values.
-3. Click **Start**.
-4. If the camera has no saved zones, define the work zones when prompted by
-   the backend.
-5. Set the limit for each zone in the machine card.
+2. Add a machine name, RTSP URL, number of zones, and the required people
+   limit for each zone. The default occupancy delay is 120 seconds (2
+   minutes).
+3. Click **Save machine**, then **Start**.
+4. When you click **Start**, the dashboard requests a camera preview from the
+   backend. Draw exactly the configured number of work zones in the browser
+   and click **Start monitoring**. The backend then persists those polygons
+   and starts detection; it never opens a local zone-setup window.
+5. Set the limit for each zone in the machine card if the safety procedure
+   changes.
 6. Click **Update settings**. If the camera is running, it is restarted with
    the new limits.
 7. Use **Stop** to stop detection without deleting the machine.
@@ -197,7 +202,13 @@ for zone-specific occupancy rules.
 ## Safety and event behavior
 
 - Exceeding a zone's configured limit for the configured occupancy delay
-  creates a `PEOPLE_OVER_ALLOWED_LIMIT` event, screenshot, and cooldown.
+  starts a violation interval. When the zone returns to its allowed count, a
+  `PEOPLE_OVER_ALLOWED_LIMIT` event records the interval, for example
+  `09:52:00 AM - 10:00:00 AM`, and a screenshot is saved.
+- A person whose detection disappears is kept present during the configured
+  absence delay (five minutes by default). This prevents a temporary
+  detector/tracker miss or person overlap from stopping the violation timer.
+  The person is marked gone only after that delay.
 - A person absent from a zone for the configured absence delay creates a
   `PERSON_AWAY_OVER_5_MINUTES` event and screenshot.
 - Phone detection inside a person's work zone creates a `PHONE_DETECTED`

@@ -79,6 +79,9 @@ class MonitoringManager:
         return urlunsplit(parsed._replace(netloc=f"{user}:{password}@{host}"))
 
     def start(self, machine: dict):
+        return self.start_with_zones(machine, [])
+
+    def start_with_zones(self, machine: dict, zones):
         machine_id = int(machine["id"])
         camera_id = self._camera_id(machine_id)
         result = self._request(
@@ -89,6 +92,8 @@ class MonitoringManager:
                 "source": self._source_with_credentials(machine["rtsp_url"]),
                 "max_persons": machine["max_persons"],
                 "zone_limits": machine.get("zone_limits", {}),
+                "zone_count": len(zones) or len(machine.get("zone_limits", {})) or 1,
+                "zones": zones,
                 "multiple_limit_seconds": machine["multiple_limit_seconds"],
                 "absence_limit_seconds": machine["absence_limit_seconds"],
             },
@@ -100,6 +105,22 @@ class MonitoringManager:
         with self._lock:
             self._sessions[machine_id] = session
         return session
+
+    def preview(self, machine: dict):
+        request = Request(
+            f"{BACKEND_URL}/detection/preview",
+            data=json.dumps({
+                "camera_id": self._camera_id(int(machine["id"])),
+                "source": self._source_with_credentials(machine["rtsp_url"]),
+            }).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                return response.read()
+        except (HTTPError, URLError, TimeoutError) as exc:
+            raise RuntimeError(f"CNC backend preview failed: {exc}") from exc
 
     def stop(self, machine_id: int):
         try:
@@ -160,6 +181,9 @@ class MonitoringManager:
             "last_error": result.get("last_error"),
             "started_at": started_at,
         }
+
+    def zones_status(self, machine_id: int):
+        return self._request("GET", f"/detection/{self._camera_id(machine_id)}/zones")
 
     def events(self):
         return self._request("GET", "/events")

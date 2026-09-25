@@ -20,6 +20,8 @@ h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowra
 .stopped { background: #3f3f46; color: #d4d4d8; }
 .panel { background: #111c30; border: 1px solid #263449; border-radius: 16px; padding: clamp(16px, 3vw, 24px); margin-bottom: 20px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
+.zone-limit-entry { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; align-items: end; }
+.zone-limit-entry > label { font-size: 12px; }
 label { display: flex; flex-direction: column; gap: 7px; color: #cbd5e1; font-size: 14px; }
 input { width: 100%; min-width: 0; padding: 11px; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: white; }
 .form-actions { display: flex; align-items: end; }
@@ -29,8 +31,22 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .delete-button { background: #991b1b; padding: 8px 10px; font-size: 16px; }
 .delete-button:hover { background: #dc2626; }
 .secondary { background: #334155; }
+.preview-button { background: #0f766e; }
+.preview-button:hover { background: #0d9488; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; }
 .machine-card { min-width: 0; overflow: hidden; border: 1px solid #2d3b50; border-radius: 12px; padding: 16px; background: rgba(15, 23, 42, .45); }
+.monitoring-summary { margin: 14px 0; padding: 12px; border-radius: 8px; background: #172338; }
+.monitoring-summary p { margin: 0; }
+.summary-events { margin: 12px 0; color: #cbd5e1; }
+.summary-events h4 { margin: 0; font-size: 14px; }
+.summary-events > .card-top { margin-bottom: 8px; }
+.summary-events p { margin: 6px 0; font-size: 13px; }
+.machine-event { padding: 9px 10px; margin-top: 7px; border-radius: 8px; background: #172338; font-size: 12px; }
+.machine-event > div { display: flex; justify-content: space-between; gap: 8px; }
+.machine-event small { color: #94a3b8; white-space: nowrap; }
+.machine-event p { color: #cbd5e1; overflow-wrap: anywhere; }
+.machine-event a { color: #93c5fd; }
+.preview-video { display: block; width: 100%; max-height: 720px; object-fit: contain; background: #020617; border-radius: 8px; margin: 14px 0; }
 .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-width: 0; }
 .live-video, .video-placeholder { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 360px; object-fit: contain; background: #020617; border-radius: 8px; margin: 14px 0; }
 .video-placeholder { display: flex; align-items: center; justify-content: center; padding: 20px; color: #94a3b8; text-align: center; }
@@ -52,12 +68,21 @@ th, td { text-align: left; padding: 12px; border-bottom: 1px solid #263449; font
 .zone-status { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; background: #172338; color: #cbd5e1; }
 .zone-status span { color: #94a3b8; }
 .zone-status strong { color: #f8fafc; }
+.violation { color: #fca5a5; font-style: normal; }
 .zone-limits { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
 .settings-form label { font-size: 12px; }
 .settings-form button { grid-column: 1 / -1; justify-self: start; }
 .credentials-dialog { width: min(100% - 32px, 420px); border: 1px solid #334155; border-radius: 12px; padding: 24px; color: #e8edf5; background: #111c30; }
 .credentials-dialog::backdrop { background: rgba(2, 6, 23, .72); }
 .credentials-dialog form { display: grid; gap: 16px; }
+.zone-dialog { width: min(100% - 32px, 900px); }
+.zone-count-control { display: inline-flex; flex-direction: row; align-items: center; gap: 10px; margin-bottom: 10px; }
+.zone-count-control input { width: 90px; }
+.zone-canvas-wrap { position: relative; width: 100%; background: #020617; }
+.zone-canvas-wrap img { display: block; width: 100%; pointer-events: none; }
+.zone-canvas-wrap canvas { position: absolute; inset: 0; z-index: 2; display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; pointer-events: auto; }
+.draw-zone-button { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.draw-zone-button.active { background: #16a34a; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 600px) {

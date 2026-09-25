@@ -53,6 +53,13 @@ class CameraWorker(threading.Thread):
         self.reader = CameraReader(self.camera_id, self.source)
         self.width, self.height, self.fps = self.reader.width, self.reader.height, self.reader.fps
         self.zones = self.zone_manager.load(self.camera_id, self.width, self.height)
+        expected_zones = getattr(self.config, "zone_count", None)
+        if self.zones is not None and expected_zones is not None and len(self.zones) != expected_zones:
+            self.reader.stop()
+            raise RuntimeError(
+                f"Saved zone count ({len(self.zones)}) does not match "
+                f"configured zone count ({expected_zones})"
+            )
         self.reader.start()
         frame = None
         for _ in range(300):
@@ -64,11 +71,8 @@ class CameraWorker(threading.Thread):
             self.reader.stop()
             raise RuntimeError(f"{self.camera_id} did not produce a frame")
         if self.zones is None:
-            self.zones = self.zone_manager.setup_interactive(self.camera_id, frame)
-            if self.zones is None:
-                self.reader.stop()
-                self.running = False
-                return False
+            self.reader.stop()
+            raise RuntimeError("Zones must be defined in the dashboard before monitoring starts")
         self.zone_masks = self.zone_manager.masks(self.zones, self.width, self.height)
         self.safety = SafetyRules(self.camera_id, len(self.zones), self.event_manager, self.config)
         self.latest_raw = frame

@@ -33,6 +33,15 @@ class ZoneManager:
             print(f"Could not load zones for {camera_id}:", exc)
             return None
 
+    def save_normalized(self, camera_id, zones):
+        path = self.file_path(camera_id)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(
+                {"zones": zones, "margin_pixels": self.margin_px},
+                f,
+                indent=4,
+            )
+
     def masks(self, zones, width, height):
         result = []
         for zone in zones:
@@ -74,7 +83,7 @@ class ZoneManager:
             cv2.putText(output, f"ZONE {index + 1}", (x, max(30, y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
         return output
 
-    def setup_interactive(self, camera_id, frame):
+    def setup_interactive(self, camera_id, frame, zone_count=None):
         zones = []
         points = []
         window = f"CNC - {camera_id} - Zone Setup"
@@ -113,7 +122,7 @@ class ZoneManager:
                 if len(points) >= 3:
                     zones.append(np.array(points, dtype=np.int32))
                     points.clear()
-                if zones:
+                if zones and (zone_count is None or len(zones) == zone_count):
                     self.save(camera_id, zones, frame.shape[1], frame.shape[0])
                     cv2.destroyWindow(window)
                     return zones

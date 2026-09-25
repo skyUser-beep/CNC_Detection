@@ -19,11 +19,15 @@
         <label>Machine name<input name="name" required placeholder="CNC Machine 01"></label>
         <label>RTSP URL<input name="rtsp_url" required placeholder="rtsp://user:password@camera-ip/stream"></label>
         <label>Maximum people<input name="max_persons" type="number" min="1" max="50" value="1" required></label>
+        <label>Number of zones<input name="zone_count" id="zone-count" type="number" min="1" max="20" value="1" required></label>
+        <div class="zone-limit-entry" id="zone-limit-entry">
+          <label>Zone 1 required people<input name="zone_limit_1" type="number" min="1" max="50" value="1" required></label>
+        </div>
         <label>Occupancy delay (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="120" required></label>
         <label>Absence delay (seconds)<input name="absence_limit_seconds" type="number" min="1" value="300" required></label>
         <div class="form-actions"><button type="submit">Save machine</button></div>
       </form>
-      <p class="hint">Use the authorized occupancy limit from your machine safety procedure. The limit is not inferred automatically from polygon size.</p>
+      <p class="hint">After saving, Start opens the browser zone editor. Draw exactly the configured number of zones and click Start monitoring. A violation starts after 2 minutes by default and ends only after the occupants are confirmed gone.</p>
     </section>
 
     <section class="panel">
@@ -31,41 +35,40 @@
       {% if machines %}
       <div class="cards">
       {% for machine in machines %}
-        <article class="machine-card">
+        <article class="machine-card" data-machine-id="{{ machine.id }}">
           <div class="card-top"><h3>{{ machine.name }}</h3><span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span></div>
-          {% if machine.runtime.running %}
-          <img class="live-video" src="/backend/detection/camera_{{ '%02d'|format(machine.id) }}/stream" alt="Live video for {{ machine.name }}">
-          {% else %}
-          <div class="video-placeholder">Start monitoring to view live video.</div>
-          {% endif %}
-          <p class="rtsp"><strong>RTSP:</strong> {{ machine.rtsp_url }}</p>
-          <div class="metrics"><div><b>{{ machine.runtime.people_inside }}</b><small>People inside</small></div><div><b>{{ machine.max_persons }}</b><small>Max allowed</small></div><div><b>{{ machine.multiple_limit_seconds }}s</b><small>Occupancy delay</small></div></div>
-          {% if machine.runtime.zones %}
-          <div class="zone-statuses">
+          <div class="monitoring-summary">
+            <p class="muted">Video monitoring runs on the backend service. This dashboard displays monitoring results only.</p>
+          </div>
+          <div class="metrics"><div><b data-people-count>{{ machine.runtime.people_inside }}</b><small>People inside</small></div><div><b data-zone-count>{{ machine.zone_limits|length or machine.runtime.zones|length or 1 }}</b><small>Work zones</small></div><div><b>{{ machine.multiple_limit_seconds }}s</b><small>Violation delay</small></div></div>
+          <div class="zone-statuses" data-zone-statuses>
             {% for zone in machine.runtime.zones %}
-            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present / {{ zone.allowed }} allowed</span></div>
+            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present / {{ zone.allowed }} allowed{% if zone.violation.active %}<br><em class="violation">Violation since {{ zone.violation.started_display }}</em>{% endif %}</span></div>
             {% endfor %}
           </div>
-          {% endif %}
-          <form method="post" action="/machines/{{ machine.id }}/settings" class="settings-form">
-            <div class="zone-limits">
-            {% for zone in machine.runtime.zones %}
-            <label>Zone {{ zone.zone }} limit<input name="zone_limit_{{ zone.zone }}" type="number" min="1" max="50" value="{{ machine.zone_limits.get('zone_' ~ zone.zone, machine.max_persons) }}" required></label>
+          <div class="summary-events">
+            <div class="card-top"><h4>Events and violation periods</h4><span class="muted" data-event-count>{{ machine.events|length }} recorded</span></div>
+            <div data-machine-events>
+            {% for event in machine.events %}
+            <div class="machine-event">
+              <div><strong>{{ event.event_type }}</strong><small>{{ event.timestamp }}</small></div>
+              <p>{{ event.details }}</p>
+              {% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank" rel="noopener">Open screenshot</a>{% endif %}
+            </div>
+            {% else %}
+            <p class="muted">No events recorded.</p>
             {% endfor %}
             </div>
-            <label>Maximum people<input name="max_persons" type="number" min="1" max="50" value="{{ machine.max_persons }}" required></label>
-            <label>Event delay (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="{{ machine.multiple_limit_seconds }}" required></label>
-            <label>Absence delay (seconds)<input name="absence_limit_seconds" type="number" min="1" value="{{ machine.absence_limit_seconds }}" required></label>
-            <button type="submit">Update settings</button>
-          </form>
+          </div>
           {% if machine.runtime.last_error %}<p class="error">{{ machine.runtime.last_error }}</p>{% endif %}
           <div class="actions">
-            <form method="post" action="/machines/{{ machine.id }}/start" data-start-form data-rtsp-url="{{ machine.rtsp_url }}"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form data-preview-url="/machines/{{ machine.id }}/preview" data-zone-count="{{ machine.zone_limits|length or machine.runtime.zones|length or 1 }}" data-zones-saved="{{ 'true' if machine.zones_saved else 'false' }}"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
             <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %}>Stop</button></form>
             <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Delete this machine and its saved events?')"><button class="delete-button" title="Delete machine" aria-label="Delete machine">&#128465; Delete</button></form>
             <a class="button secondary" href="/api/machines/{{ machine.id }}/status">Status JSON</a>
+            <a class="button secondary" href="/machines/{{ machine.id }}/monitor">Open monitoring page</a>
           </div>
-          <p class="hint">Live preview is supplied by the CNC detection backend.</p>
+          <p class="hint">Use Update work-zones only when the work-zone layout changes. The live monitoring video is not shown in the admin dashboard.</p>
         </article>
       {% endfor %}
       </div>
@@ -79,6 +82,71 @@
       </tbody></table></div>
     </section>
   </main>
+  <script>
+    (() => {
+      async function refresh(card) {
+        const [statusResponse, eventsResponse] = await Promise.all([
+          fetch(`/api/machines/${card.dataset.machineId}/status`, {cache: "no-store"}),
+          fetch("/api/events", {cache: "no-store"})
+        ]);
+        if (!statusResponse.ok || !eventsResponse.ok) return;
+        const status = await statusResponse.json();
+        const events = await eventsResponse.json();
+        card.querySelector("[data-people-count]").textContent = status.people_inside;
+        card.querySelector("[data-zone-count]").textContent = status.zones.length;
+        const container = card.querySelector("[data-zone-statuses]");
+        container.replaceChildren(...status.zones.map(zone => {
+          const row = document.createElement("div");
+          row.className = "zone-status";
+          const label = document.createElement("b");
+          label.textContent = `Zone ${zone.zone}`;
+          const value = document.createElement("span");
+          value.innerHTML = `<strong>${zone.present}</strong> present / ${zone.allowed} allowed`;
+          if (zone.violation && zone.violation.active) {
+            value.insertAdjacentHTML("beforeend", `<br><em class="violation">Violation since ${zone.violation.started_display}</em>`);
+          }
+          row.append(label, value);
+          return row;
+        }));
+        const machineEvents = events.filter(event => event.camera_id === `camera_${String(card.dataset.machineId).padStart(2, "0")}`);
+        const eventContainer = card.querySelector("[data-machine-events]");
+        card.querySelector("[data-event-count]").textContent = `${machineEvents.length} recorded`;
+        if (!machineEvents.length) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent = "No events recorded.";
+          eventContainer.replaceChildren(empty);
+          return;
+        }
+        eventContainer.replaceChildren(...machineEvents.map(event => {
+          const item = document.createElement("div");
+          item.className = "machine-event";
+          const heading = document.createElement("div");
+          const type = document.createElement("strong");
+          type.textContent = event.event_type;
+          const timestamp = document.createElement("small");
+          timestamp.textContent = event.timestamp;
+          heading.append(type, timestamp);
+          const details = document.createElement("p");
+          details.textContent = event.details || "No details recorded.";
+          item.append(heading, details);
+          if (event.screenshot_url) {
+            const screenshot = document.createElement("a");
+            screenshot.href = `/backend${event.screenshot_url}`;
+            screenshot.target = "_blank";
+            screenshot.rel = "noopener";
+            screenshot.textContent = "Open screenshot";
+            item.append(screenshot);
+          }
+          return item;
+        }));
+      }
+      document.querySelectorAll("[data-machine-id]").forEach(card => {
+        refresh(card);
+        setInterval(() => refresh(card).catch(() => {}), 2000);
+      });
+    })();
+  </script>
   <dialog id="camera-credentials-dialog" class="credentials-dialog">
     <form method="dialog" id="camera-credentials-form">
       <h2>Camera credentials required</h2>
@@ -89,16 +157,238 @@
       <div class="dialog-actions"><button type="button" data-dialog-cancel>Cancel</button><button type="submit">Save and connect</button></div>
     </form>
   </dialog>
+  <dialog id="zone-dialog" class="credentials-dialog zone-dialog">
+    <h2>Define machine zones</h2>
+    <label class="zone-count-control">Number of zones
+      <input id="editor-zone-count" type="number" min="1" max="20" value="1">
+    </label>
+    <p class="hint">Click <strong>Draw work-zone</strong>, then click and drag over the camera image. Press “Finish zone” after each rectangle.</p>
+    <div class="zone-canvas-wrap"><img id="zone-preview" alt="Camera preview"><canvas id="zone-canvas" aria-label="Drag to draw a zone"></canvas><button type="button" id="draw-zone" class="draw-zone-button">Draw work-zone</button></div>
+    <p id="zone-progress" class="hint"></p>
+    <div class="dialog-actions"><button type="button" data-zone-cancel>Cancel</button><button type="button" id="finish-zone" disabled>Finish zone</button><button type="button" id="start-monitoring">Start monitoring</button></div>
+  </dialog>
   <script>
     (() => {
+      const zoneCount = document.getElementById("zone-count");
+      const zoneEntry = document.getElementById("zone-limit-entry");
+      if (zoneCount && zoneEntry) {
+        const renderZoneLimits = () => {
+          const count = Math.max(1, Math.min(20, Number(zoneCount.value) || 1));
+          zoneEntry.replaceChildren(...Array.from({ length: count }, (_, index) => {
+            const label = document.createElement("label");
+            label.textContent = `Zone ${index + 1} required people`;
+            const input = document.createElement("input");
+            input.name = `zone_limit_${index + 1}`;
+            input.type = "number";
+            input.min = "1";
+            input.max = "50";
+            input.value = "1";
+            input.required = true;
+            label.append(input);
+            return label;
+          }));
+        };
+        zoneCount.addEventListener("input", renderZoneLimits);
+      }
       const dialog = document.getElementById("camera-credentials-dialog");
       const form = document.getElementById("camera-credentials-form");
       const error = document.getElementById("credentials-error");
       let pendingStartForm;
+      const zoneDialog = document.getElementById("zone-dialog");
+      const preview = document.getElementById("zone-preview");
+      const canvas = document.getElementById("zone-canvas");
+      const ctx = canvas.getContext("2d");
+      let zoneForm, zones = [], points = [], dragStart = null, dragging = false, drawingEnabled = false;
+      const editorZoneCount = document.getElementById("editor-zone-count");
+      async function openZoneEditor(startForm) {
+        const response = await fetch(startForm.dataset.previewUrl, {method: "GET"});
+        if (!response.ok) return false;
+        zoneForm = startForm; zones = []; points = []; drawingEnabled = false;
+        editorZoneCount.value = Math.max(1, Number(startForm.dataset.zoneCount) || 1);
+        const drawButton = document.getElementById("draw-zone");
+        drawButton.textContent = "Draw work-zone";
+        drawButton.style.display = "block";
+        drawButton.disabled = false;
+        drawButton.classList.remove("active");
+        preview.src = URL.createObjectURL(await response.blob());
+        preview.style.pointerEvents = "none";
+        preview.onload = () => {
+          zoneDialog.showModal();
+          requestAnimationFrame(drawZones);
+        };
+        return true;
+      }
+      function drawZones() {
+        const width = preview.getBoundingClientRect().width;
+        const height = preview.getBoundingClientRect().height;
+        if (!width || !height) return;
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        [...zones, points].forEach((zone, index) => {
+          if (!zone.length) return;
+          const x = zone[0][0] * canvas.width;
+          const y = zone[0][1] * canvas.height;
+          const width = (zone[1][0] - zone[0][0]) * canvas.width;
+          const height = (zone[2][1] - zone[0][1]) * canvas.height;
+          ctx.strokeStyle = index < zones.length ? "#22d3ee" : "#facc15";
+          ctx.fillStyle = index < zones.length ? "rgba(34, 211, 238, .15)" : "rgba(250, 204, 21, .15)";
+          ctx.lineWidth = 3;
+          ctx.fillRect(x, y, width, height);
+          ctx.strokeRect(x, y, width, height);
+        });
+        const required = Math.max(1, Number(editorZoneCount.value) || 1);
+        const state = points.length === 4 ? "ready" : zones.length ? "click Draw next work-zone, then drag" : "click Draw work-zone, then drag";
+        document.getElementById("zone-progress").textContent = `Zones drawn: ${zones.length}${required > zones.length ? ` (target ${required})` : ""}; current rectangle: ${state}`;
+      }
+      function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return [
+          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+          Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+        ];
+      }
+      function isCanvasPosition(event) {
+        const rect = canvas.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 &&
+          event.clientX >= rect.left && event.clientX <= rect.right &&
+          event.clientY >= rect.top && event.clientY <= rect.bottom;
+      }
+      function beginRectangle(event) {
+        if (!drawingEnabled || !zoneForm || !isCanvasPosition(event)) return;
+        dragStart = canvasPoint(event);
+        points = [dragStart, dragStart, dragStart, dragStart];
+        dragging = true;
+        drawZones();
+      }
+      function updateRectangle(event) {
+        if (!dragging) return;
+        const current = canvasPoint(event);
+        const left = Math.min(dragStart[0], current[0]);
+        const top = Math.min(dragStart[1], current[1]);
+        const right = Math.max(dragStart[0], current[0]);
+        const bottom = Math.max(dragStart[1], current[1]);
+        points = [[left, top], [right, top], [right, bottom], [left, bottom]];
+        drawZones();
+      }
+      function finishRectangle() {
+        if (!dragging) return;
+        dragging = false;
+        if (points.length === 4) {
+          const width = Math.abs(points[1][0] - points[0][0]);
+          const height = Math.abs(points[2][1] - points[1][1]);
+          if (width < 0.02 || height < 0.02) points = [];
+        }
+        drawZones();
+      }
+      document.addEventListener("mousedown", (event) => {
+        if (event.button === 0) beginRectangle(event);
+      });
+      document.addEventListener("mousemove", updateRectangle);
+      document.addEventListener("mouseup", finishRectangle);
+      document.getElementById("draw-zone").addEventListener("click", () => {
+        drawingEnabled = true;
+        points = [];
+        const button = document.getElementById("draw-zone");
+        button.textContent = "Drag on image now";
+        button.style.display = "none";
+        button.classList.add("active");
+        document.getElementById("finish-zone").disabled = false;
+        drawZones();
+      });
+      editorZoneCount.addEventListener("input", () => {
+        const required = Math.max(1, Math.min(20, Number(editorZoneCount.value) || 1));
+        editorZoneCount.value = required;
+        if (zones.length > required) {
+          zones = zones.slice(0, required);
+          points = [];
+        }
+        drawZones();
+      });
+      canvas.addEventListener("pointerdown", (event) => {
+        beginRectangle(event);
+      });
+      canvas.addEventListener("pointermove", (event) => {
+        updateRectangle(event);
+      });
+      canvas.addEventListener("pointerup", (event) => {
+        finishRectangle();
+      });
+      canvas.addEventListener("mousedown", (event) => {
+        if (event.button !== 0 || dragging) return;
+        dragStart = canvasPoint(event);
+        points = [dragStart, dragStart, dragStart, dragStart];
+        dragging = true;
+        drawZones();
+      });
+      canvas.addEventListener("mousemove", (event) => {
+        if (!dragging) return;
+        const current = canvasPoint(event);
+        const left = Math.min(dragStart[0], current[0]);
+        const top = Math.min(dragStart[1], current[1]);
+        const right = Math.max(dragStart[0], current[0]);
+        const bottom = Math.max(dragStart[1], current[1]);
+        points = [[left, top], [right, top], [right, bottom], [left, bottom]];
+        drawZones();
+      });
+      canvas.addEventListener("mouseup", (event) => {
+        if (!dragging) return;
+        dragging = false;
+        const width = Math.abs(points[1][0] - points[0][0]);
+        const height = Math.abs(points[2][1] - points[1][1]);
+        if (width < 0.02 || height < 0.02) points = [];
+        drawZones();
+      });
+      canvas.addEventListener("click", (event) => {
+        if (dragging || points.length) return;
+        const point = canvasPoint(event);
+        const size = 0.12;
+        points = [
+          [Math.max(0, point[0] - size / 2), Math.max(0, point[1] - size / 2)],
+          [Math.min(1, point[0] + size / 2), Math.max(0, point[1] - size / 2)],
+          [Math.min(1, point[0] + size / 2), Math.min(1, point[1] + size / 2)],
+          [Math.max(0, point[0] - size / 2), Math.min(1, point[1] + size / 2)],
+        ];
+        drawZones();
+      });
+      window.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        if (points.length === 4) {
+          const width = Math.abs(points[1][0] - points[0][0]);
+          const height = Math.abs(points[2][1] - points[1][1]);
+          if (width < 0.02 || height < 0.02) points = [];
+        }
+        drawZones();
+      });
+      document.getElementById("finish-zone").addEventListener("click", () => {
+        if (!drawingEnabled || points.length !== 4) return;
+        zones.push(points); points = []; drawZones();
+        drawingEnabled = false;
+        const button = document.getElementById("draw-zone");
+        button.textContent = zones.length ? "Draw next work-zone" : "Draw work-zone";
+        button.style.display = "block";
+        button.disabled = false;
+        button.classList.remove("active");
+      });
+      document.querySelector("[data-zone-cancel]").addEventListener("click", () => zoneDialog.close());
+      document.getElementById("start-monitoring").addEventListener("click", async () => {
+        if (points.length === 4) { zones.push(points); points = []; }
+        if (!zones.length) {
+          document.getElementById("zone-progress").textContent = "Draw at least one zone before starting monitoring";
+          return;
+        }
+        const response = await fetch(zoneForm.action, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({zones}) });
+        if (response.ok) window.location.reload(); else alert(await response.text());
+      });
 
       async function start(formToSubmit) {
-        const response = await fetch(formToSubmit.action, { method: "POST", redirect: "manual" });
-        if (response.status === 303 || response.ok || response.type === "opaqueredirect") {
+        const response = await fetch(formToSubmit.action, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({zones: []}),
+        });
+        if (response.ok) {
           window.location.reload();
           return true;
         }
@@ -108,10 +398,26 @@
       document.querySelectorAll("[data-start-form]").forEach((startForm) => {
         startForm.addEventListener("submit", async (event) => {
           event.preventDefault();
-          if (await start(startForm)) return;
-          pendingStartForm = startForm;
-          error.hidden = true;
-          dialog.showModal();
+          if (startForm.dataset.zonesSaved === "true") {
+            if (!(await start(startForm))) {
+              pendingStartForm = startForm; error.hidden = true; dialog.showModal();
+            }
+          } else if (!(await openZoneEditor(startForm))) {
+            pendingStartForm = startForm; error.hidden = true; dialog.showModal();
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-zone-editor]").forEach((editorButton) => {
+        editorButton.addEventListener("click", async () => {
+          const editorForm = document.createElement("form");
+          editorForm.action = editorButton.dataset.action;
+          editorForm.dataset.previewUrl = editorButton.dataset.previewUrl;
+          editorForm.dataset.zoneCount = editorButton.dataset.zoneCount;
+          editorForm.dataset.zonesSaved = "false";
+          if (!(await openZoneEditor(editorForm))) {
+            pendingStartForm = editorForm; error.hidden = true; dialog.showModal();
+          }
         });
       });
 
@@ -126,7 +432,7 @@
           return;
         }
         dialog.close();
-        if (!(await start(pendingStartForm))) {
+        if (!(await openZoneEditor(pendingStartForm))) {
           error.textContent = "The camera still could not be opened. Check the credentials and try again.";
           error.hidden = false;
           dialog.showModal();
