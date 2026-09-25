@@ -65,6 +65,32 @@ class SafetyRules:
         self.violation_open = {i: False for i in range(zones_count)}
         self.violation_track_ids = {i: set() for i in range(zones_count)}
 
+    def _record_absence_if_confirmed(self, lock, zone, current_time, events):
+        away_start = lock.get("away_start")
+        if away_start is None or current_time - away_start < self.absence_limit:
+            return
+        started_at = lock.get("away_started_at") or datetime.now().astimezone()
+        ended_at = datetime.now().astimezone()
+        duration = current_time - away_start
+        details = (
+            f"Person {lock['person_key']} absent from zone {zone + 1}: "
+            f"{started_at.strftime('%I:%M:%S %p')} - "
+            f"{ended_at.strftime('%I:%M:%S %p')} "
+            f"({duration:.1f} seconds)"
+        )
+        timestamp = self.event_manager.log(
+            self.camera_id, current_time, "PERSON_ABSENCE_INTERVAL",
+            lock["track_id"], details,
+        )
+        events.append({
+            "timestamp": timestamp,
+            "event_type": "PERSON_ABSENCE_INTERVAL",
+            "track_ids": {lock["track_id"]},
+            "details": details,
+            "zone": zone,
+        })
+        lock["away_logged"] = True
+
     def update(self,persons,current_time,zone_count,):
         events = []
 
@@ -167,10 +193,15 @@ class SafetyRules:
                     lock["last_seen"] = current_time
                     used_ids.add(new_track_id)
                     if matched["zone"] == z:
+                        self._record_absence_if_confirmed(
+                            lock, z, current_time, events
+                        )
                         # Person is PRESENT.
                         lock["inside"] = True
                         # Cancel any previous away timer.
                         lock["away_start"] = None
+                        lock["away_started_at"] = None
+                        lock["missing_started_at"] = None
                         # Allow a future departure to create
                         # a new event.
                         lock["away_logged"] = False
@@ -181,6 +212,7 @@ class SafetyRules:
                         if lock["inside"]:
                             lock["inside"] = False
                             lock["away_start"] = current_time
+                            lock["away_started_at"] = datetime.now().astimezone()
                             lock["away_logged"] = False
                             print(f"[{self.camera_id}] Zone {z + 1}: "
                                 f"PERSON LEFT ZONE | Person Key "
@@ -193,50 +225,20 @@ class SafetyRules:
                     if lock["inside"]:
                         if lock.get("missing_start") is None:
                             lock["missing_start"] = current_time
+                            lock["missing_started_at"] = datetime.now().astimezone()
                         if current_time - lock["missing_start"] >= self.absence_limit:
                             lock["inside"] = False
                             # Keep the original disappearance time so the
                             # configured absence period is not counted twice.
                             lock["away_start"] = lock["missing_start"]
+                            lock["away_started_at"] = lock.get(
+                                "missing_started_at",
+                                datetime.now().astimezone(),
+                            )
                             lock["away_logged"] = False
                         else:
                             inside[z].add(lock["track_id"])
                             continue
-
-                    if lock["away_start"] is not None and not lock["away_logged"]:
-
-                        away_duration = current_time- lock["away_start"]
-
-                        if away_duration >= self.absence_limit:
-                            event_type = "PERSON_AWAY_OVER_5_MINUTES"
-                            details = (
-                                f"Locked person {lock['person_key']} "
-                                f"outside zone {z + 1} "
-                                f"for {away_duration:.1f} "
-                                f"seconds"
-                            )
-                            timestamp = self.event_manager.log(
-                                self.camera_id,
-                                current_time, event_type,
-                                lock["track_id"],
-                                details,
-                            )
-                            events.append({
-                                "timestamp": timestamp,
-                                "event_type": event_type,
-                                "track_ids": {
-                                    lock["track_id"]
-                                },
-                                "details": details,
-                                "zone": z,
-                            })
-                            lock["away_logged"] = True
-                            print(f"[{self.camera_id}] Zone {z + 1}: "
-                                f"PERSON AWAY EVENT | Person Key: "
-                                f"{lock['person_key']} | Track ID: "
-                                f"{lock['track_id']} | Away: "
-                                f"{away_duration:.1f}s"
-                            )
 
         for person in persons:
             track_id = person["id"]
@@ -279,6 +281,8 @@ class SafetyRules:
                 lock["last_seen"] = current_time
                 lock["inside"] = True
                 lock["away_start"] = None
+                lock["away_started_at"] = None
+                lock["missing_started_at"] = None
                 lock["missing_start"] = None
 
                 lock["away_logged"] = False
@@ -301,6 +305,8 @@ class SafetyRules:
                 ),
                 "last_seen": current_time,
                 "away_start": None,
+                "away_started_at": None,
+                "missing_started_at": None,
                 "away_logged": False,
                 "missing_start": None,
                 "inside": True,

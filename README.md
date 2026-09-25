@@ -209,8 +209,12 @@ for zone-specific occupancy rules.
   absence delay (five minutes by default). This prevents a temporary
   detector/tracker miss or person overlap from stopping the violation timer.
   The person is marked gone only after that delay.
-- A person absent from a zone for the configured absence delay creates a
-  `PERSON_AWAY_OVER_5_MINUTES` event and screenshot.
+- When a person leaves a zone, an absence timer starts immediately. If the
+  person returns within the configured absence delay (five minutes by
+  default), no event is created. If the person returns after that delay, one
+  `PERSON_ABSENCE_INTERVAL` event records the complete departure-to-return
+  interval and saves one screenshot. No repeated screenshots are created
+  while the person is absent.
 - Phone detection inside a person's work zone creates a `PHONE_DETECTED`
   event and screenshot.
 - Duplicate person detections are suppressed before counting.
