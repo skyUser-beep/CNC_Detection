@@ -9,70 +9,44 @@
 <body>
   <main class="container">
     <header class="header">
-      <div><h1>CNC Monitoring</h1><p>Admin control dashboard • RTSP cameras</p></div>
-      <span class="pill">Web V1</span>
+      <div><h1>CNC Dashboard</h1><p>Admin control dashboard &bull; RTSP cameras</p></div>
+      <button type="button" id="open-add-machine">+ Add Machine</button>
     </header>
 
     <section class="panel">
-      <h2>Add CNC machine</h2>
-      <form method="post" action="/machines" class="form-grid">
-        <label>Machine name<input name="name" required placeholder="CNC Machine 01"></label>
-        <label>RTSP URL<input name="rtsp_url" required placeholder="rtsp://user:password@camera-ip/stream"></label>
-        <label>Maximum people<input name="max_persons" type="number" min="1" max="50" value="1" required></label>
-        <label>Number of zones<input name="zone_count" id="zone-count" type="number" min="1" max="20" value="1" required></label>
-        <div class="zone-limit-entry" id="zone-limit-entry">
-          <label>Zone 1 required people<input name="zone_limit_1" type="number" min="1" max="50" value="1" required></label>
-        </div>
-        <label>Occupancy delay (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="120" required></label>
-        <label>Absence delay (seconds)<input name="absence_limit_seconds" type="number" min="1" value="300" required></label>
-        <div class="form-actions"><button type="submit">Save machine</button></div>
-      </form>
-      <p class="hint">After saving, Start opens the browser zone editor. Draw exactly the configured number of zones and click Start monitoring. A violation starts after 2 minutes by default and ends only after the occupants are confirmed gone.</p>
-    </section>
-
-    <section class="panel">
-      <h2>Registered machines</h2>
+      <div class="card-top"><h2>Machines</h2><span class="muted">{{ machines|length }} registered</span></div>
       {% if machines %}
-      <div class="cards">
-      {% for machine in machines %}
-        <article class="machine-card" data-machine-id="{{ machine.id }}">
-          <div class="card-top"><h3>{{ machine.name }}</h3><span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span></div>
-          <div class="monitoring-summary">
-            <p class="muted">Video monitoring runs on the backend service. This dashboard displays monitoring results only.</p>
-          </div>
-          <div class="metrics"><div><b data-people-count>{{ machine.runtime.people_inside }}</b><small>People inside</small></div><div><b data-zone-count>{{ machine.zone_limits|length or machine.runtime.zones|length or 1 }}</b><small>Work zones</small></div><div><b>{{ machine.multiple_limit_seconds }}s</b><small>Violation delay</small></div></div>
-          <div class="zone-statuses" data-zone-statuses>
-            {% for zone in machine.runtime.zones %}
-            <div class="zone-status"><b>Zone {{ zone.zone }}</b><span><strong>{{ zone.present }}</strong> present / {{ zone.allowed }} allowed{% if zone.violation.active %}<br><em class="violation">Violation since {{ zone.violation.started_display }}</em>{% endif %}</span></div>
-            {% endfor %}
-          </div>
-          <div class="summary-events">
-            <div class="card-top"><h4>Events and violation periods</h4><span class="muted" data-event-count>{{ machine.events|length }} recorded</span></div>
-            <div data-machine-events>
-            {% for event in machine.events %}
-            <div class="machine-event">
-              <div><strong>{{ event.event_type }}</strong><small>{{ event.timestamp }}</small></div>
-              <p>{{ event.details }}</p>
-              {% if event.screenshot_url %}<a href="/backend{{ event.screenshot_url }}" target="_blank" rel="noopener">Open screenshot</a>{% endif %}
-            </div>
-            {% else %}
-            <p class="muted">No events recorded.</p>
-            {% endfor %}
-            </div>
-          </div>
-          {% if machine.runtime.last_error %}<p class="error">{{ machine.runtime.last_error }}</p>{% endif %}
-          <div class="actions">
-            <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form data-preview-url="/machines/{{ machine.id }}/preview" data-zone-count="{{ machine.zone_limits|length or machine.runtime.zones|length or 1 }}" data-zones-saved="{{ 'true' if machine.zones_saved else 'false' }}"><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
-            <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %}>Stop</button></form>
-            <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Delete this machine and its saved events?')"><button class="delete-button" title="Delete machine" aria-label="Delete machine">&#128465; Delete</button></form>
-            <a class="button secondary" href="/api/machines/{{ machine.id }}/status">Status JSON</a>
-            <a class="button secondary" href="/machines/{{ machine.id }}/monitor">Open monitoring page</a>
-          </div>
-          <p class="hint">Use Update work-zones only when the work-zone layout changes. The live monitoring video is not shown in the admin dashboard.</p>
-        </article>
-      {% endfor %}
+      <div class="table-wrap">
+      <table class="machines-table">
+        <thead><tr><th></th><th>Name</th><th>Zone</th><th>Allowed/Max</th><th>Violation</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for machine in machines %}
+        {% set zone_count = machine.zone_limits|length or machine.runtime.zones|length or 1 %}
+        {% set allowed_total = (machine.zone_limits.values()|sum) or machine.max_persons %}
+        {% set has_violation = machine.runtime.zones|selectattr('violation.active')|list|length > 0 %}
+        <tr data-machine-id="{{ machine.id }}">
+          <td><a class="preview-link" href="/machines/{{ machine.id }}/monitor" title="See preview">&rarr;</a></td>
+          <td>
+            <div class="machine-name">{{ machine.name }}</div>
+            <span class="status {{ 'running' if machine.runtime.running else 'stopped' }}">{{ 'Running' if machine.runtime.running else 'Stopped' }}</span>
+          </td>
+          <td><span data-zone-count>{{ zone_count }}</span></td>
+          <td><span data-people-count>{{ machine.runtime.people_inside }}</span>/<span data-allowed-total>{{ allowed_total }}</span></td>
+          <td><span class="violation-pill {{ 'active' if has_violation else '' }}" data-violation>{{ 'ACTIVE' if has_violation else 'OK' }}</span></td>
+          <td class="row-actions">
+            <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form data-preview-url="/machines/{{ machine.id }}/preview" data-zone-count="{{ zone_count }}" data-zones-saved="{{ 'true' if machine.zones_saved else 'false' }}"><button {% if machine.runtime.running %}disabled{% endif %} title="Start">&#9654;</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %} title="Stop">&#9632;</button></form>
+            <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Delete this machine and its saved events?')"><button class="delete-button" title="Delete machine" aria-label="Delete machine">&#128465;</button></form>
+          </td>
+        </tr>
+        {% if machine.runtime.last_error %}
+        <tr class="error-row"><td></td><td colspan="5" class="error">{{ machine.runtime.last_error }}</td></tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
       </div>
-      {% else %}<p class="muted">No machines registered yet.</p>{% endif %}
+      {% else %}<p class="muted">No machines registered yet. Click + Add Machine to get started.</p>{% endif %}
     </section>
 
     <section class="panel">
@@ -82,71 +56,27 @@
       </tbody></table></div>
     </section>
   </main>
-  <script>
-    (() => {
-      async function refresh(card) {
-        const [statusResponse, eventsResponse] = await Promise.all([
-          fetch(`/api/machines/${card.dataset.machineId}/status`, {cache: "no-store"}),
-          fetch("/api/events", {cache: "no-store"})
-        ]);
-        if (!statusResponse.ok || !eventsResponse.ok) return;
-        const status = await statusResponse.json();
-        const events = await eventsResponse.json();
-        card.querySelector("[data-people-count]").textContent = status.people_inside;
-        card.querySelector("[data-zone-count]").textContent = status.zones.length;
-        const container = card.querySelector("[data-zone-statuses]");
-        container.replaceChildren(...status.zones.map(zone => {
-          const row = document.createElement("div");
-          row.className = "zone-status";
-          const label = document.createElement("b");
-          label.textContent = `Zone ${zone.zone}`;
-          const value = document.createElement("span");
-          value.innerHTML = `<strong>${zone.present}</strong> present / ${zone.allowed} allowed`;
-          if (zone.violation && zone.violation.active) {
-            value.insertAdjacentHTML("beforeend", `<br><em class="violation">Violation since ${zone.violation.started_display}</em>`);
-          }
-          row.append(label, value);
-          return row;
-        }));
-        const machineEvents = events.filter(event => event.camera_id === `camera_${String(card.dataset.machineId).padStart(2, "0")}`);
-        const eventContainer = card.querySelector("[data-machine-events]");
-        card.querySelector("[data-event-count]").textContent = `${machineEvents.length} recorded`;
-        if (!machineEvents.length) {
-          const empty = document.createElement("p");
-          empty.className = "muted";
-          empty.textContent = "No events recorded.";
-          eventContainer.replaceChildren(empty);
-          return;
-        }
-        eventContainer.replaceChildren(...machineEvents.map(event => {
-          const item = document.createElement("div");
-          item.className = "machine-event";
-          const heading = document.createElement("div");
-          const type = document.createElement("strong");
-          type.textContent = event.event_type;
-          const timestamp = document.createElement("small");
-          timestamp.textContent = event.timestamp;
-          heading.append(type, timestamp);
-          const details = document.createElement("p");
-          details.textContent = event.details || "No details recorded.";
-          item.append(heading, details);
-          if (event.screenshot_url) {
-            const screenshot = document.createElement("a");
-            screenshot.href = `/backend${event.screenshot_url}`;
-            screenshot.target = "_blank";
-            screenshot.rel = "noopener";
-            screenshot.textContent = "Open screenshot";
-            item.append(screenshot);
-          }
-          return item;
-        }));
-      }
-      document.querySelectorAll("[data-machine-id]").forEach(card => {
-        refresh(card);
-        setInterval(() => refresh(card).catch(() => {}), 2000);
-      });
-    })();
-  </script>
+
+  <dialog id="add-machine-dialog" class="credentials-dialog">
+    <form method="post" action="/machines" class="form-grid">
+      <h2 style="grid-column: 1 / -1;">Add Machine</h2>
+      <label>Name<input name="name" required placeholder="CNC Machine 01"></label>
+      <label>Url<input name="rtsp_url" required placeholder="rtsp://user:password@camera-ip/stream"></label>
+      <fieldset class="zone-drawing-fieldset">
+        <legend>Zone Drawing</legend>
+        <label>Number of zones<input name="zone_count" id="zone-count" type="number" min="1" max="20" value="1" required></label>
+        <div class="zone-limit-entry" id="zone-limit-entry">
+          <label>Zone 1 required people<input name="zone_limit_1" type="number" min="1" max="50" value="1" required></label>
+        </div>
+        <p class="hint">The exact zone shape is drawn on the camera image after saving -- click &#9654; on the new row.</p>
+      </fieldset>
+      <label>Max People<input name="max_persons" type="number" min="1" max="50" value="1" required></label>
+      <label>Time (seconds)<input name="multiple_limit_seconds" type="number" min="1" value="120" required></label>
+      <label>Away Time (seconds)<input name="absence_limit_seconds" type="number" min="1" value="300" required></label>
+      <div class="dialog-actions" style="grid-column: 1 / -1;"><button type="button" data-add-cancel>Cancel</button><button type="submit">Save</button></div>
+    </form>
+  </dialog>
+
   <dialog id="camera-credentials-dialog" class="credentials-dialog">
     <form method="dialog" id="camera-credentials-form">
       <h2>Camera credentials required</h2>
@@ -162,13 +92,38 @@
     <label class="zone-count-control">Number of zones
       <input id="editor-zone-count" type="number" min="1" max="20" value="1">
     </label>
-    <p class="hint">Click <strong>Draw work-zone</strong>, then click and drag over the camera image. Press “Finish zone” after each rectangle.</p>
+    <p class="hint">Click <strong>Draw work-zone</strong>, then click and drag over the camera image. Press "Finish zone" after each rectangle.</p>
     <div class="zone-canvas-wrap"><img id="zone-preview" alt="Camera preview"><canvas id="zone-canvas" aria-label="Drag to draw a zone"></canvas><button type="button" id="draw-zone" class="draw-zone-button">Draw work-zone</button></div>
     <p id="zone-progress" class="hint"></p>
     <div class="dialog-actions"><button type="button" data-zone-cancel>Cancel</button><button type="button" id="finish-zone" disabled>Finish zone</button><button type="button" id="start-monitoring">Start monitoring</button></div>
   </dialog>
+
   <script>
     (() => {
+      async function refresh(row) {
+        const response = await fetch(`/api/machines/${row.dataset.machineId}/status`, {cache: "no-store"});
+        if (!response.ok) return;
+        const status = await response.json();
+        row.querySelector("[data-people-count]").textContent = status.people_inside;
+        row.querySelector("[data-zone-count]").textContent = status.zones.length || 1;
+        const violation = status.zones.some(zone => zone.violation && zone.violation.active);
+        const pill = row.querySelector("[data-violation]");
+        pill.textContent = violation ? "ACTIVE" : "OK";
+        pill.classList.toggle("active", violation);
+      }
+      document.querySelectorAll("[data-machine-id]").forEach(row => {
+        refresh(row);
+        setInterval(() => refresh(row).catch(() => {}), 2000);
+      });
+    })();
+  </script>
+  <script>
+    (() => {
+      const addDialog = document.getElementById("add-machine-dialog");
+      document.getElementById("open-add-machine").addEventListener("click", () => addDialog.showModal());
+      const addCancel = addDialog.querySelector("[data-add-cancel]");
+      if (addCancel) addCancel.addEventListener("click", () => addDialog.close());
+
       const zoneCount = document.getElementById("zone-count");
       const zoneEntry = document.getElementById("zone-limit-entry");
       if (zoneCount && zoneEntry) {

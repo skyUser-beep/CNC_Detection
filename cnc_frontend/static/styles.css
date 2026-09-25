@@ -94,4 +94,32 @@ th, td { text-align: left; padding: 12px; border-bottom: 1px solid #263449; font
   .settings-form button { grid-column: auto; width: 100%; }
   .actions > *, .actions form, .actions button, .actions .button { width: 100%; }
   .actions button, .actions .button { text-align: center; }
+  .row-actions { flex-direction: column; }
 }
+
+/* Dashboard table + Add Machine dialog */
+.machines-table td { vertical-align: middle; }
+.machine-name { font-weight: 600; margin-bottom: 4px; }
+.preview-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: #1e293b; color: #93c5fd; text-decoration: none;
+  font-size: 18px; font-weight: 700;
+}
+.preview-link:hover { background: #2563eb; color: white; }
+.violation-pill {
+  display: inline-block; border-radius: 999px; padding: 5px 12px;
+  font-size: 12px; font-weight: 700; letter-spacing: .03em;
+  background: #14532d; color: #bbf7d0;
+}
+.violation-pill.active { background: #7f1d1d; color: #fecaca; }
+.row-actions { display: flex; gap: 6px; }
+.row-actions form { margin: 0; }
+.row-actions button { padding: 8px 11px; }
+.error-row td { border-bottom: 1px solid #263449; padding-top: 0; }
+.zone-drawing-fieldset {
+  grid-column: 1 / -1; border: 1px solid #334155; border-radius: 10px;
+  padding: 14px; display: grid; gap: 12px;
+}
+.zone-drawing-fieldset legend { padding: 0 6px; color: #cbd5e1; font-size: 13px; font-weight: 600; }
+#add-machine-dialog.credentials-dialog { width: min(100% - 32px, 560px); }
