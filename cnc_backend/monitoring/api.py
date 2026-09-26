@@ -28,6 +28,7 @@ from zones.zone_manager import ZoneManager
 app = FastAPI(title="CNC Detection API")
 workers: dict[str, CameraWorker] = {}
 workers_lock = threading.Lock()
+camera_start_locks: dict[str, threading.Lock] = {}
 events = EventManager(config.outputs_dir)
 zones = ZoneManager(config.outputs_dir, config.zone_margin_px)
 app.mount("/outputs", StaticFiles(directory=config.outputs_dir), name="outputs")  # Security consideration only for trusted local network
@@ -155,7 +156,14 @@ def start_detection(request: StartRequest):
             raise HTTPException(422, "Each zone must contain at least three points")
 
     with workers_lock:
-        existing = workers.get(request.camera_id)
+        camera_lock = camera_start_locks.setdefault(
+            request.camera_id, threading.Lock()
+        )
+
+    with camera_lock:
+        with workers_lock:
+            existing = workers.get(request.camera_id)
+
         if existing and existing.is_alive() and existing.running:
             if not request.zones:
                 return {"camera_id": request.camera_id, "running": True}
@@ -172,9 +180,12 @@ def start_detection(request: StartRequest):
                 )
 
         try:
-            workers[request.camera_id] = make_worker(request)
+            worker = make_worker(request)
         except Exception as exc:
             raise HTTPException(500, f"Failed to start detection: {exc}") from exc
+
+        with workers_lock:
+            workers[request.camera_id] = worker
     return {"camera_id": request.camera_id, "running": True}
 
 @app.post("/detection/preview")
@@ -202,7 +213,13 @@ def detection_preview(request: StartRequest):
 @app.post("/detection/{camera_id}/stop")
 def stop_detection(camera_id: str):
     with workers_lock:
-        worker = workers.get(camera_id)
+        camera_lock = camera_start_locks.setdefault(
+            camera_id, threading.Lock()
+        )
+
+    with camera_lock:
+        with workers_lock:
+            worker = workers.get(camera_id)
         if worker is not None:
             worker.running = False
             if worker.reader is not None:
