@@ -192,6 +192,17 @@ def machine_preview(machine_id: int):
         raise HTTPException(502, str(exc)) from exc
     return StreamingResponse(iter([preview]), media_type="image/jpeg")
 
+@app.get("/machines/{machine_id}/zones")
+def machine_zones(machine_id: int):
+    if not get_machine(machine_id):
+        raise HTTPException(404, "Machine not found")
+    try:
+        return manager.zones_status(machine_id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            502, f"CNC backend saved zones unavailable: {exc}"
+        ) from exc
+
 @app.post("/machines/{machine_id}/settings")
 async def update_settings( request: Request,
     machine_id: int,
