@@ -26,7 +26,7 @@
       <div class="actions">
         <form method="post" action="/machines/{{ machine.id }}/start-monitoring" data-start-form><button {% if machine.runtime.running %}disabled{% endif %}>Start</button></form>
         <form method="post" action="/machines/{{ machine.id }}/stop"><button class="secondary" {% if not machine.runtime.running %}disabled{% endif %}>Stop</button></form>
-        <button type="button" class="secondary" data-zone-editor data-preview-url="/machines/{{ machine.id }}/preview" data-action="/machines/{{ machine.id }}/start-monitoring">Update work-zones</button>
+        <button type="button" class="secondary" data-zone-editor data-preview-url="/machines/{{ machine.id }}/preview" data-action="/machines/{{ machine.id }}/start-monitoring" data-zone-count="{{ machine.runtime.zones|length or machine.zone_limits|length or 1 }}">Update work-zones</button>
       </div>
     </section>
 
@@ -94,63 +94,199 @@
   </script>
   <dialog id="zone-dialog" class="credentials-dialog zone-dialog">
     <h2>Update machine zones</h2>
-    <p class="hint">Click Draw work-zone, then drag rectangles over the preview.</p>
+    <label class="zone-count-control">Number of zones
+      <input id="editor-zone-count" type="number" min="1" max="20" value="1">
+    </label>
+    <p class="hint">Redraw every zone by tracing its boundary on the image. Saving replaces the current zone layout.</p>
     <div class="zone-canvas-wrap"><img id="zone-preview" alt="Camera preview"><canvas id="zone-canvas"></canvas><button type="button" id="draw-zone" class="draw-zone-button">Draw work-zone</button></div>
     <p id="zone-progress" class="hint"></p>
-    <div class="dialog-actions"><button type="button" data-zone-cancel>Cancel</button><button type="button" id="finish-zone">Finish zone</button><button type="button" id="start-monitoring">Save zones</button></div>
+    <div class="dialog-actions"><button type="button" data-zone-cancel>Cancel</button><button type="button" id="finish-zone" disabled>Finish zone</button><button type="button" id="start-monitoring">Save zones</button></div>
   </dialog>
   <script>
     (() => {
-      document.querySelectorAll("[data-start-form]").forEach(form => {
-        form.addEventListener("submit", async event => {
-          event.preventDefault();
-          const response = await fetch(form.action, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({zones: []}),
-          });
-          const metrics = document.querySelector("[data-machine-id]");
-          const zoneStatuses = document.querySelector("[data-zone-statuses]");
-          async function refreshStatus() {
-            const response = await fetch(`/api/machines/${metrics.dataset.machineId}/status`, {cache: "no-store"});
-            if (!response.ok) return;
-            const status = await response.json();
-            metrics.querySelector("[data-people-count]").textContent = status.people_inside;
-            metrics.querySelector("[data-zone-count]").textContent = status.zones.length;
-            zoneStatuses.replaceChildren(...status.zones.map(zone => {
-              const row = document.createElement("div"); row.className = "zone-status";
-              const label = document.createElement("b"); label.textContent = `Zone ${zone.zone}`;
-              const value = document.createElement("span"); value.innerHTML = `<strong>${zone.present}</strong> present / ${zone.allowed} allowed`;
-              if (zone.violation && zone.violation.active) value.insertAdjacentHTML("beforeend", `<br><em class="violation">Violation since ${zone.violation.started_display}</em>`);
-              row.append(label, value); return row;
-            }));
-          }
-          refreshStatus();
-          setInterval(() => refreshStatus().catch(() => {}), 2000);
-          if (response.ok) location.reload(); else alert(await response.text());
-        });
-      });
       const dialog = document.getElementById("zone-dialog");
       const canvas = document.getElementById("zone-canvas");
       const preview = document.getElementById("zone-preview");
       const ctx = canvas.getContext("2d");
       const drawButton = document.getElementById("draw-zone");
-      let editor, zones = [], points = [], start = null, drawing = false, enabled = false;
-      function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(1, (event.clientX-r.left)/r.width)), Math.max(0, Math.min(1, (event.clientY-r.top)/r.height))]; }
-      function redraw() {
-        const r = preview.getBoundingClientRect(); if (!r.width || !r.height) return;
-        canvas.width = r.width; canvas.height = r.height; ctx.clearRect(0, 0, canvas.width, canvas.height);
-        [...zones, points].forEach((z, i) => { if (z.length !== 4) return; const x=z[0][0]*canvas.width,y=z[0][1]*canvas.height,w=(z[1][0]-z[0][0])*canvas.width,h=(z[2][1]-z[0][1])*canvas.height; ctx.fillStyle=i<zones.length?"rgba(34,211,238,.15)":"rgba(250,204,21,.15)";ctx.strokeStyle=i<zones.length?"#22d3ee":"#facc15";ctx.lineWidth=3;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h); });
-        document.getElementById("zone-progress").textContent = `Zones drawn: ${zones.length}${points.length===4 ? " • rectangle ready" : ""}`;
+      const finishButton = document.getElementById("finish-zone");
+      const progress = document.getElementById("zone-progress");
+      const zoneCount = document.getElementById("editor-zone-count");
+      let editor, zones = [], points = [], drawing = false, enabled = false;
+      let activePointerId = null;
+
+      function point(event) {
+        const rect = canvas.getBoundingClientRect();
+        return [
+          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+          Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+        ];
       }
-      drawButton.onclick = () => { enabled=true; drawButton.style.display="none"; };
-      canvas.onmousedown = e => { if (!enabled) return; start=point(e); points=[start,start,start,start]; drawing=true; };
-      canvas.onmousemove = e => { if (!drawing) return; const p=point(e),l=Math.min(start[0],p[0]),t=Math.min(start[1],p[1]),r=Math.max(start[0],p[0]),b=Math.max(start[1],p[1]); points=[[l,t],[r,t],[r,b],[l,b]]; redraw(); };
-      window.onmouseup = () => { if (!drawing) return; drawing=false; redraw(); };
-      document.getElementById("finish-zone").onclick = () => { if (points.length===4) { zones.push(points); points=[]; enabled=false; drawButton.style.display="block"; drawButton.textContent="Draw next work-zone"; redraw(); } };
-      document.querySelector("[data-zone-cancel]").onclick = () => dialog.close();
-      document.getElementById("start-monitoring").onclick = async () => { if (points.length===4) zones.push(points); if (!zones.length) return; const r=await fetch(editor.action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({zones})}); if(r.ok) location.reload(); else alert(await r.text()); };
-      document.querySelector("[data-zone-editor]").onclick = async e => { editor=e.currentTarget; const r=await fetch(editor.dataset.previewUrl); if(!r.ok) return alert(await r.text()); preview.src=URL.createObjectURL(await r.blob()); preview.onload=()=>{dialog.showModal();requestAnimationFrame(redraw);}; };
+
+      function redraw() {
+        const rect = preview.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const drawPolygon = (zone, color, fill) => {
+          if (!zone.length) return;
+          ctx.beginPath();
+          ctx.moveTo(zone[0][0] * canvas.width, zone[0][1] * canvas.height);
+          zone.slice(1).forEach(vertex => {
+            ctx.lineTo(vertex[0] * canvas.width, vertex[1] * canvas.height);
+          });
+          if (zone.length >= 3) {
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 3;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.stroke();
+        };
+
+        zones.forEach(zone => drawPolygon(zone, "#22d3ee", "rgba(34, 211, 238, .18)"));
+        if (points.length) drawPolygon(points, "#facc15", "rgba(250, 204, 21, .15)");
+
+        const required = Math.max(1, Math.min(20, Number(zoneCount.value) || 1));
+        const state = drawing
+          ? "tracing shape"
+          : points.length >= 3
+            ? "ready to finish"
+            : zones.length
+              ? "draw the next zone"
+              : "click Draw work-zone";
+        progress.textContent = `Zones drawn: ${zones.length} (target ${required}); ${state}`;
+        finishButton.disabled = !enabled || drawing || points.length < 3;
+      }
+
+      canvas.style.touchAction = "none";
+      canvas.addEventListener("pointerdown", event => {
+        if (!enabled || drawing || event.button !== 0) return;
+        event.preventDefault();
+        drawing = true;
+        activePointerId = event.pointerId;
+        points = [point(event)];
+        canvas.setPointerCapture(event.pointerId);
+        redraw();
+      });
+      canvas.addEventListener("pointermove", event => {
+        if (!drawing || event.pointerId !== activePointerId) return;
+        const next = point(event);
+        const previous = points[points.length - 1];
+        if (Math.hypot(next[0] - previous[0], next[1] - previous[1]) >= 0.002) {
+          points.push(next);
+          redraw();
+        }
+      });
+      canvas.addEventListener("pointerup", event => {
+        if (!drawing || event.pointerId !== activePointerId) return;
+        const last = points[points.length - 1];
+        const finalPoint = point(event);
+        if (!last || Math.hypot(finalPoint[0] - last[0], finalPoint[1] - last[1]) > 0.0001) {
+          points.push(finalPoint);
+        }
+        drawing = false;
+        activePointerId = null;
+        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        if (points.length < 3) {
+          points = [];
+          progress.textContent = "Trace a shape with at least 3 points.";
+        }
+        redraw();
+      });
+      canvas.addEventListener("pointercancel", () => {
+        drawing = false;
+        activePointerId = null;
+        points = [];
+        redraw();
+      });
+
+      drawButton.addEventListener("click", () => {
+        if (zones.length >= Number(zoneCount.value)) {
+          progress.textContent = "All configured zones are drawn.";
+          return;
+        }
+        enabled = true;
+        points = [];
+        drawButton.style.display = "none";
+        finishButton.disabled = true;
+        redraw();
+      });
+
+      finishButton.addEventListener("click", () => {
+        if (!enabled || drawing || points.length < 3) return;
+        zones.push(points);
+        points = [];
+        enabled = false;
+        drawButton.textContent = "Draw next work-zone";
+        drawButton.style.display = "block";
+        redraw();
+      });
+
+      zoneCount.addEventListener("input", () => {
+        zoneCount.value = Math.max(1, Math.min(20, Number(zoneCount.value) || 1));
+        if (zones.length > Number(zoneCount.value)) zones.length = Number(zoneCount.value);
+        if (zones.length >= Number(zoneCount.value)) {
+          enabled = false;
+          points = [];
+          drawButton.style.display = "block";
+        }
+        redraw();
+      });
+
+      document.querySelector("[data-zone-cancel]").addEventListener("click", () => dialog.close());
+      document.getElementById("start-monitoring").addEventListener("click", async () => {
+        if (drawing) {
+          progress.textContent = "Release the pointer before saving.";
+          return;
+        }
+        if (points.length >= 3) {
+          zones.push(points);
+          points = [];
+        }
+        if (zones.length !== Number(zoneCount.value)) {
+          progress.textContent = `Draw ${zoneCount.value} zones before saving. You have drawn ${zones.length}.`;
+          return;
+        }
+        const response = await fetch(editor.dataset.action, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({zones})
+        });
+        if (response.ok) location.reload();
+        else alert(await response.text());
+      });
+
+      document.querySelector("[data-zone-editor]").addEventListener("click", async event => {
+        editor = event.currentTarget;
+        zones = [];
+        points = [];
+        drawing = false;
+        enabled = false;
+        zoneCount.value = editor.dataset.zoneCount;
+        drawButton.textContent = "Draw work-zone";
+        drawButton.style.display = "block";
+        const response = await fetch(editor.dataset.previewUrl);
+        if (!response.ok) {
+          alert(await response.text());
+          return;
+        }
+        if (preview.src.startsWith("blob:")) URL.revokeObjectURL(preview.src);
+        preview.onload = () => {
+          dialog.showModal();
+          requestAnimationFrame(redraw);
+        };
+        preview.src = URL.createObjectURL(await response.blob());
+      });
     })();
   </script>
 </body>

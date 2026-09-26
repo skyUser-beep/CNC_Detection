@@ -5,6 +5,8 @@ import threading # Protects shared worker state
 import time 
 from types import SimpleNamespace # Creates a conf. object dynamically
 from types import ModuleType # helps executes modules while copying conf
+import json
+import httpx
 
 import cv2 # encodes video frames as jpeg images
 from fastapi.responses import Response
@@ -15,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-
+from fastapi import HTTPException
 
 import config
 from camera.worker import CameraWorker
@@ -143,10 +145,32 @@ def delete_event(event_id: str):
 
 @app.post("/detection/start")
 def start_detection(request: StartRequest):
+    if request.zones:
+        if len(request.zones) > 20:
+            raise HTTPException(422, "Number of zones must not exceed 20")
+        if any(
+            len(zone) < 3 or any(len(point) != 2 for point in zone)
+            for zone in request.zones
+        ):
+            raise HTTPException(422, "Each zone must contain at least three points")
+
     with workers_lock:
         existing = workers.get(request.camera_id)
         if existing and existing.is_alive() and existing.running:
-            return {"camera_id": request.camera_id, "running": True}
+            if not request.zones:
+                return {"camera_id": request.camera_id, "running": True}
+            existing.running = False
+            if existing.reader is not None:
+                existing.reader.stop()
+
+        if existing and existing.is_alive():
+            existing.join(timeout=5)
+            if existing.is_alive():
+                raise HTTPException(
+                    503,
+                    f"Previous worker for {request.camera_id} has not stopped yet",
+                )
+
         try:
             workers[request.camera_id] = make_worker(request)
         except Exception as exc:
@@ -219,11 +243,22 @@ def detection_status(camera_id: str):
 
 @app.get("/detection/{camera_id}/zones")
 def detection_zones(camera_id: str):
-    path = zones.file_path(camera_id)
-    if not path.exists():
-        return {"saved": False, "count": 0}
-    loaded = zones.load(camera_id, 1, 1)
-    return {"saved": bool(loaded), "count": len(loaded or [])}
+    zone_file=(config.outputs_dir/"camera_zones"/f"{camera_id}_zones.json")
+    if not zone_file.exists():
+        return {"saved":False , "count":0,"zones":[],}
+    try:
+        with open(zone_file,"r",encoding="utf-8")as f:
+            data=json.load(f)
+        saved_zones=data.get("zones",[])
+        if not isinstance(saved_zones,list):
+            raise ValueError("Saved zones must be a list")
+        return {"saved": bool(saved_zones),"count":len(saved_zones),"zones":saved_zones,}
+
+    except (json.JSONDecodeError,ValueError) as exc:
+        raise HTTPException( 
+            status_code=500,
+            detail=f"Could not read saved zones:{exc}",
+        ) 
 
 @app.get("/detection/{camera_id}/stream")
 async def detection_stream(camera_id: str, request: Request):
